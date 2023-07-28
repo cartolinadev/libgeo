@@ -37,7 +37,7 @@ namespace geo { namespace heightcoding {
 Metadata heightCode(::GDALDataset &vectorDs
                     , const std::vector<const GeoDataset*> &rasterDs
                     , std::ostream &os, const Config &config)
-{
+{   
     Metadata metadata;
 
     // remember start position in the output stream
@@ -59,6 +59,7 @@ Metadata heightCode(::GDALDataset &vectorDs
     FeatureLayers featureLayers(vectorDs, lo);
 
     // heightcode
+    
     auto workingSrs(config.workingSrs
                     ? config.workingSrs : config.rasterDsSrs);
 

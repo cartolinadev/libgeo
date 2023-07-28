@@ -212,12 +212,20 @@ void FeatureLayers::load(::GDALDataset &dataset
 
             OGRFeatureDefn *ifeatureDefn = ifeature->GetDefnRef();
             const Features::Fid fid(ifeature->GetFID());
+            
+            LOG(info1) << "Feature " << ifeature->GetFID();
 
             for (int j = 0; j < ifeatureDefn->GetFieldCount(); j++) {
                 // skip unset fields
-                if (!ifeature->IsFieldSet(j)) { continue; }
+                if (!ifeature->IsFieldSet(j)) { 
+                    LOG(info1)
+                        << "\t" << ifeatureDefn->GetFieldDefn(j)->GetNameRef() << "\t<not set>";                        
+                    continue;
+                 }
                 properties[ifeatureDefn->GetFieldDefn(j)->GetNameRef()]
                     = ifeature->GetFieldAsString(j);
+                LOG(info1)
+                    << "\t" << ifeatureDefn->GetFieldDefn(j)->GetNameRef() << "\t" << ifeature->GetFieldAsString(j);    
             }
 
             // extract geometry
@@ -424,7 +432,7 @@ void FeatureLayers::transform(const SrsDefinition & targetSrs
         }
 
         if (!areSame(sourceSrs, targetSrs, SrsEquivalence::geographic)
-            && !layer.is2D()) {
+            && !layer.is3D()) {
             LOG( warn2 ) << "Source and target SRS have different datums "
                 " and not all features are 3D. Need heightcoding?";
         }

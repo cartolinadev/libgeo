@@ -524,7 +524,28 @@ SrsDefinition merge(const SrsDefinition &horiz, const SrsDefinition &vert)
 
     ::OGRSpatialReference out;
     GEO_TRADITIONAL_GIS_ORDER(out);
-    out.SetCompoundCS("", &srs, &vert);
+
+    // if input srs is already compound, SetCompountCS triggers an error,
+    // hence we strip the vertical component first
+    // perhaps this should be responsibility of the caller
+    const auto deleter = [](::OGRSpatialReference *srs) { srs->Release(); };
+    std::unique_ptr<::OGRSpatialReference, decltype(deleter)>  
+        srsclone(srs.Clone(), deleter);
+            
+    srsclone->StripVertical();        
+
+    {    
+        char * srswkt = nullptr, * vertwkt = nullptr;
+    
+        srs.exportToWkt(& srswkt), vert.exportToWkt(& vertwkt);
+    
+        LOG(info1) << "srs is: \n" << srswkt << "\n";
+        LOG(info1) << "vert is: \n" << vertwkt << "\n";
+        
+        CPLFree(srswkt); CPLFree(vertwkt);
+    }
+    
+    out.SetCompoundCS("", srsclone.get(), &vert);
     return out;
 }
 
