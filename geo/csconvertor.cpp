@@ -542,12 +542,17 @@ CsConvertor::CsConvertor(const SrsDefinition &from, const SrsDefinition &to)
                << from << " -> " << to << ").";
 }
 
-CsConvertor::CsConvertor(const SrsDefinition &,
-    const SrsDefinition &, projCtx)
+CsConvertor::CsConvertor(const SrsDefinition &from,
+    const SrsDefinition &to, projCtx)
+    : trans_(initTrans(from, to))
 {
-    LOGTHROW(fatal, std::logic_error)
-        << "CsConvertor with explicitly provided"
-        " proj context is not implemented in this variant.";
+    /* This calls are made from code that presume a non-GDAL version of the library.
+       Seems safe to ignore the explicit context, since different instances of 
+       OGRCoordinateTransformation are created in each thread (?). */
+    LOG(warn3) << "Ignoring explicitly provided context in csconvertor creation.";
+
+    LOG(info1) << "Coordinate system transformation ("
+               << from << " -> " << to << ").";        
 }
 
 CsConvertor::CsConvertor(const OGRSpatialReference &from

@@ -32,13 +32,19 @@
 #include <algorithm>
 #include <iterator>
 
+#include <proj.h>
+
 #include "math/geometry_core.hpp"
 
 #include "project.hpp"
 #include "srsdef.hpp"
 
 // forward declare projCtx
+#if PROJ_VERSION_MAJOR < 6
 typedef struct projCtx_t *projCtx;
+#else
+typedef PJ_CONTEXT *projCtx;
+#endif
 
 namespace geo {
 
