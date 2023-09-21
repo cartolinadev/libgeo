@@ -71,6 +71,41 @@ private:
     char **opts_;
 };
 
+class SlWrapper : boost::noncopyable {
+public:
+    SlWrapper(const geo::Sl &sl = geo::Sl())
+        : opts_(nullptr)
+    {
+        for (const auto &s : sl) {
+            opts_ = ::CSLAddString(opts_, s.c_str());
+        }
+    }
+
+    ~SlWrapper() { ::CSLDestroy(opts_); }
+
+    operator char**() const { return opts_; }
+
+    char** release() {
+        char** opts(opts_);
+        opts_ = nullptr;
+        return opts;
+    }
+
+    SlWrapper& operator()(const char *value) {
+        opts_ = ::CSLAddString(opts_, value);
+        return *this;
+    }
+
+    template <typename T>
+    SlWrapper& operator()(const T &value) {
+        return operator()
+            (boost::lexical_cast<std::string>(value).c_str());
+    }
+
+private:
+    char **opts_;
+};
+
 } } // namespace geo::detail
 
 #endif // geo_detail_options_hpp_included

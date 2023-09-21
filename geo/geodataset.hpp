@@ -35,6 +35,7 @@
 #ifndef geo_geodataset_hpp_included
 #define geo_geodataset_hpp_included
 
+#include <boost/none.hpp>
 #include <memory>
 #include <boost/filesystem/path.hpp>
 #include <boost/optional.hpp>
@@ -128,6 +129,11 @@ struct Options {
     }
 };
 
+/** String lists. Used as options lists in DemProcessing. */
+
+typedef std::vector<std::string> Sl;
+
+
 /** Pixel value linear transformation
  * dst_value = (raw_value * scale) + offset
  */
@@ -155,6 +161,7 @@ public:
     typedef geo::Overview Overview;
     typedef geo::OptionalOverview OptionalOverview;
     typedef geo::Options Options;
+    typedef geo::Sl Sl;
 
     static GeoDataset createFromFS(const boost::filesystem::path &path) {
         return open(path);
@@ -206,6 +213,22 @@ public:
         const math::Matrix2 & trafo = ublas::identity_matrix<double>(2),
         boost::optional<GDALDataType> dstDataTypeOverride = boost::none
         , OptionalNodataValue dstNodataValue = boost::none);
+
+    /**  DEM processing modes, used by demProcessing */
+    enum class DemProcessing {
+        hillshade, slope, aspect, color_relief, tri, tpi, roughness
+    };
+
+    /**  Performs GDALDemProcessing on a dataset, returning the result
+     *   as a new in-memory dataset.
+     *
+     *   The interface mimics that of GDALDEMProcessing C-function, which is
+     *   invoked internally.
+     */
+    static GeoDataset demProcessing(
+        const GeoDataset & source, const DemProcessing processing,
+        const Sl & options = Sl(),
+        const boost::optional<boost::filesystem::path> & colorFile = boost::none);
 
     /** Creates an invalid placeholder that can be used to hold valid dataset.
      *  Do not call any method on placeholder except:
@@ -284,13 +307,13 @@ public:
         }
 
         static Format pngRGBPhoto() {
-            return { GDT_Byte, { GCI_RedBand, GCI_GreenBand, GCI_BlueBand
-                                 , GCI_AlphaBand }
+            return { GDT_Byte, { GCI_RedBand, GCI_GreenBand, GCI_BlueBand }
                 , Format::Storage::png };
         }
 
         static Format pngRGBAPhoto() {
-            return { GDT_Byte, { GCI_RedBand, GCI_GreenBand, GCI_BlueBand }
+            return { GDT_Byte, { GCI_RedBand, GCI_GreenBand, GCI_BlueBand
+                                 , GCI_AlphaBand }
                 , Format::Storage::png };
         }
 
@@ -1089,6 +1112,16 @@ UTILITY_GENERATE_ENUM_IO(GeoDataset::Format::Storage,
                          ((jpeg))
                          ((vrt))
                          ((memory))
+                         )
+
+UTILITY_GENERATE_ENUM_IO(GeoDataset::DemProcessing,
+                         ((hillshade))
+                         ((slope))
+                         ((aspect))
+                         ((color_relief)("color-relief"))
+                         ((tri)("TRI")("tri"))
+                         ((tpi)("TPI")("tpi"))
+                         ((roughness)("Roughness")("roughness"))
                          )
 
 inline cv::Mat& GeoDataset::data(bool justData)

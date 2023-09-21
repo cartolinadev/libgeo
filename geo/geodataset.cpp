@@ -40,6 +40,7 @@
 #include <opencv2/imgproc/imgproc.hpp>
 
 #include <gdalwarper.h>
+#include <gdal_utils.h>
 
 #include "utility/openmp.hpp"
 #include "utility/expect.hpp"
@@ -548,6 +549,49 @@ GeoDataset GeoDataset::deriveInMemory(
                            extents, ublas::identity_matrix<double>(2),
                            dstDataTypeOverride, dstNodataValue);
 }
+
+
+GeoDataset GeoDataset::demProcessing(
+        const GeoDataset & source, const DemProcessing processing,
+        const Sl & options,
+        const boost::optional<boost::filesystem::path> & colorFile) {
+
+    // auxiliary
+    struct DEMProcessingOptionsWrapper : boost::noncopyable {
+
+        DEMProcessingOptionsWrapper(
+            const geo::detail::SlWrapper & options) {
+
+            opts = GDALDEMProcessingOptionsNew(options, nullptr);
+        }
+
+        ~DEMProcessingOptionsWrapper() {
+            GDALDEMProcessingOptionsFree(opts);
+        }
+
+        GDALDEMProcessingOptions * opts;
+    };
+
+    // sanity - valid source
+    assert(source);
+
+    // options - instruct dem processing to use MEM driver
+    DEMProcessingOptionsWrapper opts{detail::SlWrapper(options)("-of")("MEM")};
+
+    // execute
+    int usageError;
+
+    std::unique_ptr<GDALDataset> ddset(GDALDataset::FromHandle(
+        GDALDEMProcessing("MEM", GDALDataset::ToHandle(source.dset_.get()),
+                          boost::lexical_cast<std::string>(processing).c_str(),
+                          colorFile ? colorFile->string().c_str() : nullptr,
+                          opts.opts, & usageError)));
+
+    // done
+    return GeoDataset(std::move(ddset), true);
+}
+
+
 
 GeoDataset GeoDataset::create(const boost::filesystem::path &path
                              , const boost::optional<SrsDefinition> &srs
