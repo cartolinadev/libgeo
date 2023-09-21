@@ -224,11 +224,14 @@ public:
      *
      *   The interface mimics that of GDALDEMProcessing C-function, which is
      *   invoked internally.
+     *
+     *   The color file is only useful (and required) if desired processing is
+     *   color-relief.
      */
     static GeoDataset demProcessing(
         const GeoDataset & source, const DemProcessing processing,
         const Sl & options = Sl(),
-        const boost::optional<boost::filesystem::path> & colorFile = boost::none);
+        const boost::filesystem::path & colorFile = {});
 
     /** Creates an invalid placeholder that can be used to hold valid dataset.
      *  Do not call any method on placeholder except:

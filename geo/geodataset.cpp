@@ -554,7 +554,7 @@ GeoDataset GeoDataset::deriveInMemory(
 GeoDataset GeoDataset::demProcessing(
         const GeoDataset & source, const DemProcessing processing,
         const Sl & options,
-        const boost::optional<boost::filesystem::path> & colorFile) {
+        const boost::filesystem::path & colorFile) {
 
     // auxiliary
     struct DEMProcessingOptionsWrapper : boost::noncopyable {
@@ -573,7 +573,7 @@ GeoDataset GeoDataset::demProcessing(
     };
 
     // sanity - valid source
-    assert(source);
+    ut::expect(source, "Invalid DEM processing source.");
 
     // options - instruct dem processing to use MEM driver
     DEMProcessingOptionsWrapper opts{detail::SlWrapper(options)("-of")("MEM")};
@@ -584,7 +584,7 @@ GeoDataset GeoDataset::demProcessing(
     std::unique_ptr<GDALDataset> ddset(GDALDataset::FromHandle(
         GDALDEMProcessing("MEM", GDALDataset::ToHandle(source.dset_.get()),
                           boost::lexical_cast<std::string>(processing).c_str(),
-                          colorFile ? colorFile->string().c_str() : nullptr,
+                          ! colorFile.empty() ? colorFile.c_str() : nullptr,
                           opts.opts, & usageError)));
 
     // done
