@@ -1050,8 +1050,12 @@ private:
 
     GeoDataset(const GeoDataset &other) = delete;
 
+
     GeoDataset& operator=(const GeoDataset &other) = delete;
 
+    /* Initialize from existing GDALDataset rvalue reference.
+     * freshlyCreated -> optmization when loading data (empty) and mask (full).
+     */
     GeoDataset(std::unique_ptr<GDALDataset> &&dset
                , bool freshlyCreated = false);
 

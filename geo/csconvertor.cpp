@@ -122,9 +122,9 @@ initOgr(const OGRSpatialReference &from, const OptName &fromName
     if(from.IsSame(fromClone.get()) == FALSE)
     {
         // this warning always fires on my system, demoted from warn3
-        LOG(warn1) << "Dangerous promotion to 3D was necessary for: "
+        /*LOG(warn1) << "Dangerous promotion to 3D was necessary for: "
                    << asName(from, fromName) << " --> "
-                   << SrsDefinition::fromReference(*fromClone.get());
+                   << SrsDefinition::fromReference(*fromClone.get());*/
     }
     if(toClone->PromoteTo3D(nullptr) != OGRERR_NONE)
     {
