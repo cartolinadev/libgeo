@@ -588,7 +588,7 @@ GeoDataset GeoDataset::demProcessing(
                           opts.opts, & usageError)));
 
     // done
-    return GeoDataset(std::move(ddset), true);
+    return GeoDataset(std::move(ddset));
 }
 
 
