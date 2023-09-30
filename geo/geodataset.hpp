@@ -515,6 +515,7 @@ public:
              , const WarpOptions &options = WarpOptions()) const;
 
     void expectRGB() const;
+    void expectRGBA() const;
     void expectGray() const;
     void expectAlpha() const;
 
@@ -743,7 +744,8 @@ public:
     /** Move ctor. Allows initialization from return value.
      */
     GeoDataset(GeoDataset &&other) noexcept
-        : size_(other.size_)
+        : type_(other.type_)
+        , size_(other.size_)
         , srsWkt_(other.srsWkt_)
         , geoTransform_(std::move(other.geoTransform_))
         , dset_(std::move(other.dset_))
@@ -763,6 +765,7 @@ public:
      */
     GeoDataset& operator=(GeoDataset &&other) noexcept
     {
+        type_ = other.type_;
         size_ = other.size_;
         srsWkt_ = other.srsWkt_;
         geoTransform_ = std::move(other.geoTransform_);

@@ -274,7 +274,6 @@ GeoDataset::GeoDataset(std::unique_ptr<GDALDataset> &&dset
                 || ((numChannels_ == 4) && red && green && blue && alpha))
             {
                 // RGB(A) image, use custom mapping
-
                 channelMapping_[blue] = 0;
                 channelMapping_[green] = 1;
                 channelMapping_[red] = 2;
@@ -282,6 +281,7 @@ GeoDataset::GeoDataset(std::unique_ptr<GDALDataset> &&dset
                     channelMapping_[alpha] = 3;
                     type_ = Type::rgba;
                 } else {
+
                     type_ = Type::rgb;
                 }
             }
@@ -2007,6 +2007,11 @@ void GeoDataset::expectGray() const {
 }
 
 void GeoDataset::expectRGB() const {
+
+    ut::expect((type_ == Type::rgb), "Not a 3 channel RGB image." );
+}
+
+void GeoDataset::expectRGBA() const {
 
     ut::expect((type_ == Type::rgb), "Not a 3 channel RGB image." );
 }
