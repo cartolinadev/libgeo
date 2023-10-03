@@ -662,7 +662,9 @@ GeoDataset GeoDataset::create(const boost::filesystem::path &path
     /* create parent directory for output dataset */ {
         auto pp(usePath.parent_path());
         if (!pp.empty()) {
-            create_directories(pp);
+
+            if (pp != "." ) // odd boost::fs bug (see https://stackoverflow.com/questions/42200000/boostfilesystemcreate-directories-fails)
+                create_directories(pp);
         }
     }
 
