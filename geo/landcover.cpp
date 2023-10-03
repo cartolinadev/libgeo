@@ -42,6 +42,12 @@ namespace geo {
 namespace ut = utility;
 namespace fs = boost::filesystem;
 
+typedef ublas::matrix<float,ublas::row_major,
+                      ublas::bounded_array<float, 4> > Matrix2;
+typedef ublas::matrix<float,ublas::row_major,
+                      ublas::bounded_array<float, 9> > Matrix3;
+
+
 typedef imgproc::quadtree::RasterMask RasterMask;
 
 struct BivariateLandcover::Detail {
@@ -57,28 +63,47 @@ struct BivariateLandcover::Detail {
         // each row contains min and max values for one variable,
         // defining the range where the model is defined.
         // input values are clamped to these limits when the model is applied.
-        Eigen::Matrix<float,2,2> limits;
+        //Eigen::Matrix<float,2,2> limits;
+
+        Matrix2 limits2;
 
         // the actual function, each column has coefficients for one output
         // variable. Order RGB
-        Eigen::Matrix<float,3,3> model;
+        //Eigen::Matrix<float,3,3> model;
+
+        Matrix3 model2;
+
 
         cv::Vec3b apply(const short elevation, const short precipitation) const {
 
-            Eigen::Matrix<float,1,3>
+/*            Eigen::Matrix<float,1,3>
                 input(1,
                     math::clamp((float) elevation, limits(0,0), limits(0,1)),
                     math::clamp((float) precipitation, limits(1,0), limits(1,1))
                 ), output;
 
-            output = input * model;
+            output = input * model; */
+
+            float elev_ = math::clamp(
+                (float) elevation, limits2(0,0), limits2(0,1));
+            float precip_ = math::clamp(
+                (float) precipitation, limits2(1,0), limits2(1,1));
+
+            std::array<float,3> output {
+                model2(0,0) + elev_ * model2(1,0) + precip_ * model2(2,0),
+                model2(0,1) + elev_ * model2(1,1) + precip_ * model2(2,1),
+                model2(0,2) + elev_ * model2(1,2) + precip_ * model2(2,2)
+            };
 
             return cv::Vec3b(
                     // we clamp to 1, to reserve 0 for nodata if needed
-                    math::clamp(std::round(output(2)), 1.f, 255.f),
-                    math::clamp(std::round(output(1)), 1.f, 255.f),
-                    math::clamp(std::round(output(0)), 1.f, 255.f));
+                    math::clamp(std::round(output[2]), 1.f, 255.f),
+                    math::clamp(std::round(output[1]), 1.f, 255.f),
+                    math::clamp(std::round(output[0]), 1.f, 255.f));
         }
+
+        Function()
+            : limits2(2,2), model2(3,3) {};
 
     };
 
@@ -87,8 +112,8 @@ struct BivariateLandcover::Detail {
 };
 
 
-BivariateLandcover::BivariateLandcover() {
-    std::make_unique<Detail>();
+BivariateLandcover::BivariateLandcover()
+    : detail(std::make_unique<Detail>()) {
 }
 
 
@@ -175,7 +200,8 @@ BivariateLandcover BivariateLandcover::loadCsv(
                 if (! std::getline(ss, token, ',')) {
                     throw std::runtime_error("Parsing error: limits");
                 }
-                class_.limits(i,j) = std::stof(token);
+                //class_.limits(i,j) = std::stof(token);
+                class_.limits2(i,j) = std::stof(token);
             }
 
         for (int i = 0; i < 3; i++)
@@ -183,7 +209,8 @@ BivariateLandcover BivariateLandcover::loadCsv(
                 if (! std::getline(ss, token, ',')) {
                     throw std::runtime_error("Parsing error: model");
                 }
-                class_.model(i,j) = std::stof(token);
+                //class_.model(i,j) = std::stof(token);
+                class_.model2(i,j) = std::stof(token);
             }
 
         if (std::getline(ss, token, ',')) {
