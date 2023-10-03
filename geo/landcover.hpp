@@ -35,6 +35,7 @@
 #ifndef geo_landcover_hpp_included
 #define geo_landcover_hpp_included
 
+#include <boost/core/noncopyable.hpp>
 #include <memory>
 
 #include <boost/optional.hpp>
@@ -48,7 +49,7 @@
 namespace geo {
 
 /**
-  * Defines BGR color for each landcover class as a linear function of two
+  * Defines BGR color for e ach landcover class as a linear function of two
   * indepent variables.
   *
   * The purpose of this class is two aid in automatic coloring of bivariate
@@ -61,7 +62,7 @@ namespace geo {
   * loaded from a CSV file.
   */
 
-class BivariateLCColors {
+class BivariateLandcover {
 
 public:
     typedef imgproc::quadtree::RasterMask Mask;
@@ -88,7 +89,7 @@ public:
     /**
      * @brief create bivariate function definition from a CSV file.
      */
-    static BivariateLCColors loadCsv(const boost::filesystem::path & path);
+    static BivariateLandcover loadCsv(const boost::filesystem::path & path);
 
 
     /**
@@ -96,15 +97,24 @@ public:
      */
     void saveCsv(const boost::filesystem::path &path);
 
+    BivariateLandcover();
+    ~BivariateLandcover();
+
+    BivariateLandcover & operator = (BivariateLandcover & other) = delete;
+    BivariateLandcover & operator = (BivariateLandcover && other) noexcept;
+
+    BivariateLandcover(BivariateLandcover & other) = delete;
+    BivariateLandcover(BivariateLandcover && other) noexcept;
+
+
 private:
-    BivariateLCColors();
 
-    //class Detail;
+    struct Detail;
 
-    //std::unique_ptr<Detail> detail;
+    std::unique_ptr<Detail> detail;
 };
 
 } // namespace geo
 
 
-#endif
+#endif // geo_landcover_hpp_included

@@ -31,6 +31,7 @@ if(GDAL_FOUND)
     detail/srs.hpp detail/srs.cpp
     gdal.hpp gdal.cpp
     vectorformat.hpp vectorformat.cpp
+    landcover.hpp landcover.cpp
   )
 
   if(NOT GDAL_VERSION)
