@@ -74,7 +74,7 @@ struct BivariateLandcover::Detail {
         Matrix3 model2;
 
 
-        cv::Vec3b apply(const short elevation, const short precipitation) const {
+        cv::Vec3b apply(const short elevation, const int precipitation) const {
 
 /*            Eigen::Matrix<float,1,3>
                 input(1,
@@ -132,7 +132,7 @@ cv::Mat BivariateLandcover::apply(
     // sanity
     ut::expect(landcover.type() == CV_8UC1, "Invalid landcover data type.");
     ut::expect(elevation.type() == CV_16SC1, "Invalid elevation data type.");
-    ut::expect(precipitation.type() == CV_16SC1, "Invalid precipitation data type.");
+    ut::expect(precipitation.type() == CV_32SC1, "Invalid precipitation data type.");
 
     ut::expect(landcover.size() == elevation.size()
         && landcover.size() == precipitation.size(), "invalid data size");
@@ -148,7 +148,7 @@ cv::Mat BivariateLandcover::apply(
 
         const uchar *landcoverPtr = landcover.ptr<uchar>(i);
         const short *elevationPtr = elevation.ptr<short>(i);
-        const short *precipitationPtr = precipitation.ptr<short>(i);
+        const int *precipitationPtr = precipitation.ptr<int>(i);
         cv::Vec3b *retvalPtr = retval.ptr<cv::Vec3b>(i);
 
         for (int j = 0; j < retval.cols; j++, landcoverPtr++, elevationPtr++,

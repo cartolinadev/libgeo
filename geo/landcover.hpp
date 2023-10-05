@@ -73,7 +73,7 @@ public:
      *      classes. Type needs to be CV8U_C1.
      * @param elevation coregistered elevation matrix (DEM), type CV16S_C1
      * @param precipitation coregistered precipitation matrix (DEM), type
-     *      CV16S_C1
+     *      CV32S_C1
      * @param mask Validity mask. Pixels not set on input are not processsed.
      *      Mask is a non-const reference, as it is updated by the function
      *      whenever a landcover class for which a bivariate function
