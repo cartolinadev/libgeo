@@ -686,6 +686,9 @@ public:
      *
      * If depth is negative then native dataset data type is used (only for
      * non-expanded read).
+     *
+     * @param depth is OpenCV color depth (usually CV_8U)
+     * @param expand is the number of channels to be expanded to
      */
     cv::Mat readData(int depth, int expand = 0
                      , const ReadOptions &options = ReadOptions()) const;
@@ -698,6 +701,8 @@ public:
      *
      * Reads data into given matrix. Matrix is created only if its header is
      * different than required.
+     *
+     * @param depth is OpenCV color depth (usually CV_8U)
      */
     void readDataInto(int depth, cv::Mat &data, int expand = 0
                       , const ReadOptions &options = ReadOptions()) const;
@@ -712,6 +717,8 @@ public:
      * different than required.
      *
      * Reads only given sub-range.
+     *
+     * @param depth is OpenCV color depth (usually CV_8U)
      */
     void readDataInto(int depth, cv::Mat &data, const cv::Rect &src
                       , int expand = 0
@@ -1133,6 +1140,10 @@ UTILITY_GENERATE_ENUM_IO(GeoDataset::DemProcessing,
                          ((tpi)("TPI")("tpi"))
                          ((roughness)("Roughness")("roughness"))
                          )
+
+/**
+ * @brief note that this is always CV_64FC
+ */
 
 inline cv::Mat& GeoDataset::data(bool justData)
 {

@@ -2082,7 +2082,7 @@ void GeoDataset::exportMesh( geometry::Mesh & mesh) const {
             vpos2ord[ std::make_pair( i, j ) ] = ord++;
     }
 
-    mesh.tCoords.push_back( math::Point2( 0.0, 0.0 ) );
+    //mesh.tCoords.push_back( math::Point2( 0.0, 0.0 ) );
 
     // dump faces
     for ( int i = 0; i < size_.height - 1; i++ )
@@ -2106,8 +2106,7 @@ void GeoDataset::exportMesh( geometry::Mesh & mesh) const {
             if ( v10 && v11 && v00 ) {
 
                 mesh.addFace(
-                    ref10->second, ref11->second, ref00->second,
-                    ref10->second, ref11->second, ref00->second );
+                    ref10->second, ref11->second, ref00->second);
 
             }
 
@@ -2115,8 +2114,7 @@ void GeoDataset::exportMesh( geometry::Mesh & mesh) const {
             if ( v11 && v01 && v00 ) {
 
                 mesh.addFace(
-                    ref11->second, ref01->second, ref00->second,
-                    ref11->second, ref01->second, ref00->second );
+                    ref11->second, ref01->second, ref00->second);
 
             }
 
@@ -2124,14 +2122,12 @@ void GeoDataset::exportMesh( geometry::Mesh & mesh) const {
             if ( v00 && v10 && v01 && !v11) {
 
                 mesh.addFace(
-                    ref00->second, ref10->second, ref01->second,
-                    ref00->second, ref10->second, ref01->second );
+                    ref00->second, ref10->second, ref01->second);
             }
 
             if ( v10 && v11 && v01 && !v00) {
                 mesh.addFace(
-                    ref10->second, ref11->second, ref01->second,
-                    ref10->second, ref11->second, ref01->second );
+                    ref10->second, ref11->second, ref01->second);
             }
         }
 

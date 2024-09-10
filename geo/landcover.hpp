@@ -49,7 +49,7 @@
 namespace geo {
 
 /**
-  * Defines BGR color for e ach landcover class as a linear function of two
+  * Defines BGR color for each landcover class as a linear function of two
   * indepent variables.
   *
   * The purpose of this class is two aid in automatic coloring of bivariate
