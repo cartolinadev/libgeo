@@ -2312,6 +2312,8 @@ void GeoDataset::textureMesh(
 
                     // write out vertex and tcoords
                     omesh.vertices.push_back( vertex );
+                    if (imesh.hasNormals())
+                        omesh.normals.push_back(imesh.normals[srcVid]);
                     omesh.tCoords.push_back( math::Point2( tcoord[0], tcoord[1] ) );
                 }
             }

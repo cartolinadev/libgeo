@@ -555,6 +555,42 @@ public:
         const math::Extents2 & extents,
         geometry::Mesh & omesh ) const;
 
+    /**
+     * @brief the hillshade algorithm
+     *
+     * See https://observablehq.com/@sahilchinoy/a-faster-hillshader
+     * or GDAL DEMProcessing source for explanation on Zevenbergen-Thorne
+     * and Horn.
+     *
+     * 8 point regression minimizes mean square error of a plane passing
+     * through the neighbouring points. The mean is weighted by the inverse
+     * distance of the point from the center point.
+     */
+    enum class HillshadeAlgo {
+        zevenbergenThorne, horn, regression
+    };
+
+    /**
+     * @brief export a normal map
+     *
+     * A normal map is a 3-channel 8-bit image of the same pixel size as
+     * the underlying 1-channel dataset. Each pixel encodes a unit normal
+     * vector, with x, y, z and coordinates encoded in channels 0, 1, and 2
+     * respectively. The floating point nrmal values are mapped from
+     * (-1, 1) to (0, 255).
+     *
+     * The normals are given in the (right-handed) view coordinates, with
+     * the x axis to the right, y up, and z towards the viewer, but the image
+     * itself is in the same pixel coordinates as the underlying dataset
+     * {it needs to be flipped vertically before being used in OpenGL).
+     *
+     * The algorithm used to compute normal is given by the hillshade
+     * algorithm above.
+     */
+    cv::Mat exportNormalMap(
+        const HillshadeAlgo& algo = HillshadeAlgo::zevenbergenThorne) const;
+
+    /** @brief returns raster size */
     math::Size2i size() const { return size_; }
 
     /** Returns size of given overview.
@@ -1139,6 +1175,13 @@ UTILITY_GENERATE_ENUM_IO(GeoDataset::DemProcessing,
                          ((tri)("TRI")("tri"))
                          ((tpi)("TPI")("tpi"))
                          ((roughness)("Roughness")("roughness"))
+                         )
+
+UTILITY_GENERATE_ENUM_IO(GeoDataset::HillshadeAlgo,
+                         ((zevenbergenThorne)
+                            ("ZevenbergenThorne")("zevenbergenThorne"))
+                         ((horn)("Horn")("horn"))
+                         ((regression))
                          )
 
 /**
