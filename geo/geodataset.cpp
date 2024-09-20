@@ -2324,6 +2324,153 @@ void GeoDataset::textureMesh(
     }
 }
 
+cv::Mat GeoDataset::exportNormalMap(
+        const HillshadeAlgo& algo) const {
+
+    /** the 3x3 moving window */
+    class Window {
+
+    public:
+        // initialize window cenered at 1,1 //
+        Window(const cv::Mat &mat) : mat(mat), row(1), col(1) {
+
+            row0 = mat.ptr<double>(row - 1, col - 1);
+            row1 = mat.ptr<double>(row, col - 1);
+            row2 = mat.ptr<double>(row + 1, col - 1);
+        }
+
+        // move window 1px to the right
+        void incx() {
+
+            col++; row0++; row1 ++; row2++;
+        }
+
+        // move window 1px down
+        void incy() {
+
+            row++;
+            row0 += mat.step / sizeof(double);
+            row1 += mat.step / sizeof(double);
+            row2 += mat.step / sizeof(double);
+        }
+
+        /**
+         * @param index takes values 1-9, the window organized as
+         *       x
+         *   ----------
+         *   |Z1 Z2 Z3|
+         * y |Z4 Z5 Z6|
+         *   |Z7 Z8 Z9|
+         *   ----------
+         */
+        double v(uint index) const {
+
+            switch(index) {
+
+                case 1: return row0[0];
+                case 2: return row0[1];
+                case 3: return row0[2];
+                case 4: return row1[0];
+                case 5: return row1[1];
+                case 6: return row1[2];
+                case 7: return row2[0];
+                case 8: return row2[1];
+                case 9: return row2[2];
+                default: return 0; // never reached
+            }
+        }
+
+        /* these functions work in image coords (z points downwards).
+         * se https://observablehq.com/@sahilchinoy/a-faster-hillshader
+         * for formulas on ZevenbergenThorne and Horn.
+         */
+
+        math::Point3 zevenbergenThorne() const {
+
+            double a = 0.5 * (v(6) - v(4));
+            double b = 0.5 * (v(8) - v(2));
+
+            return normalize(math::Point3(-a, -b, -1));
+        }
+
+        math::Point3 horn() const {
+
+            double a = 0.125 * (v(3) + 2 * v(6) + v(9) - v(1) - 2 * v(4) - v(7));
+            double b = 0.125* (v(7) + 2 * v(8) + v(9) - v(1) - 2 * v(2) - v(3));
+
+            return normalize(math::Point3(-a, -b, -1));
+        }
+
+        math::Point3 regression() const {
+
+            // feature matrix
+            // target vector
+            // obtain result
+        }
+
+    private:
+        const cv::Mat &mat;
+        int row, col;
+        const double *row0, *row1, *row2;
+    };
+
+
+    int width{size_.width}, height{size_.height};
+
+    // expect a single gray channel, sanity check, loda data
+    expectGray();
+    ut::expect(width >= 3 && height >= 3);
+    assertData();
+
+    // empty map
+    cv::Mat normalMap = cv::Mat::zeros(data_->size(), CV_8UC3);
+
+    // compute normals for inner pixels
+    Window window(*data_);
+
+    for (int j = 1; j < height - 2; j++) {
+        for (int i = 1; i < width - 2; i++ ) {
+
+            math::Point3 normal;
+
+            switch (algo) {
+
+                case HillshadeAlgo::zevenbergenThorne:
+                    normal = window.zevenbergenThorne();
+                    break;
+
+                case HillshadeAlgo::horn:
+                    normal = window.horn();
+                    break;
+
+                case HillshadeAlgo::regression:
+                    normal = window.regression();
+                    break;
+            }
+
+            // we flip x and za coordinates to transform from image space
+            // to view space
+            normalMap.at<cv::Vec3b>(j,i) =
+                cv::Vec3b( - normal[0], normal[1], - normal[2]);
+
+            // next col
+            window.incx();
+        }
+
+        // next row
+        window.incy();
+    }
+
+    // replicate missing border values for safety
+    normalMap.at<cv::Vec3b>(0,0) = normalMap.at<cv::Vec3b>(1,1);
+    normalMap.at<cv::Vec3b>(width -1, height - 1)
+        = normalMap.at<cv::Vec3b>(width - 2 , height - 2);
+
+    // all done
+    return normalMap;
+}
+
+
 math::Extents2 GeoDataset::deriveExtents( const SrsDefinition &srs ) const
 {
     // use source's SRS if same (this prevents conversion through lat/lon if
