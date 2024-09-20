@@ -44,7 +44,7 @@ math::Point3 GeoTransform::rowcol2geo( double row, double col, double value ) co
     return math::Point3( p2[0], p2[1], value );
 }
 
-math::Point3 GeoTransform::raster2geo( math::Point2 p, double value ) const {
+math::Point3 GeoTransform::raster2geo(const math::Point2 & p, double value ) const {
     
     math::Point2 p2 = applyGeoTransform( p[0] + 0.5, p[1] + 0.5 );
     return math::Point3( p2[0], p2[1], value );

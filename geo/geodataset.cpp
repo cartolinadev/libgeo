@@ -38,6 +38,7 @@
 
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/opencv.hpp>
 
 #include <gdalwarper.h>
 #include <gdal_utils.h>
@@ -2332,26 +2333,23 @@ cv::Mat GeoDataset::exportNormalMap(
 
     public:
         // initialize window cenered at 1,1 //
-        Window(const cv::Mat &mat) : mat(mat), row(1), col(1) {
+        Window(const cv::Mat &mat, const math::Point2 & resolution)
+            : mat(mat), resolution(resolution) {
 
-            row0 = mat.ptr<double>(row - 1, col - 1);
-            row1 = mat.ptr<double>(row, col - 1);
-            row2 = mat.ptr<double>(row + 1, col - 1);
+            row(1);
+        }
+
+        // move window to the beginning of the row
+        void row(int i) {
+            row0 = mat.ptr<double>(i - 1);
+            row1 = mat.ptr<double>(i);
+            row2 = mat.ptr<double>(i + 1);
         }
 
         // move window 1px to the right
         void incx() {
 
-            col++; row0++; row1 ++; row2++;
-        }
-
-        // move window 1px down
-        void incy() {
-
-            row++;
-            row0 += mat.step / sizeof(double);
-            row1 += mat.step / sizeof(double);
-            row2 += mat.step / sizeof(double);
+            row0++; row1 ++; row2++;
         }
 
         /**
@@ -2387,37 +2385,78 @@ cv::Mat GeoDataset::exportNormalMap(
 
         math::Point3 zevenbergenThorne() const {
 
-            double a = 0.5 * (v(6) - v(4));
-            double b = 0.5 * (v(8) - v(2));
+            float psx(resolution[0]), psy(resolution[1]);
+
+            double a = 0.5 / psx * (v(6) - v(4));
+            double b = 0.5 / psy * (v(8) - v(2));
+
+            //LOGONCE(debug) << a << " " << b;
 
             return normalize(math::Point3(-a, -b, -1));
         }
 
         math::Point3 horn() const {
 
-            double a = 0.125 * (v(3) + 2 * v(6) + v(9) - v(1) - 2 * v(4) - v(7));
-            double b = 0.125* (v(7) + 2 * v(8) + v(9) - v(1) - 2 * v(2) - v(3));
+            float psx(resolution[0]), psy(resolution[1]);
+
+            double a =  0.125 / psx
+                * (v(3) + 2 * v(6) + v(9) - v(1) - 2 * v(4) - v(7));
+            double b = 0.125 / psy
+                * (v(7) + 2 * v(8) + v(9) - v(1) - 2 * v(2) - v(3));
 
             return normalize(math::Point3(-a, -b, -1));
         }
 
         math::Point3 regression() const {
 
+            ublas::matrix<float> X(9,3);
+            ublas::vector<float> Z(9);
+
             // feature matrix
+            float psx(resolution[0]), psy(resolution[1]);
+
+            ublas::row(X, 0) = math::Point3(-psx, -psy, 1) * 0.25;
+            ublas::row(X, 1) = math::Point3( 0,   -psy, 1) * 0.50;
+            ublas::row(X, 2) = math::Point3( psx, -psy, 1) * 0.25;
+            ublas::row(X, 3) = math::Point3(-psx,  0,   1) * 0.50;
+            ublas::row(X, 4) = math::Point3( 0,    0,   1) * 1.00;
+            ublas::row(X, 5) = math::Point3( psx,  0,   1) * 0.50;
+            ublas::row(X, 6) = math::Point3(-psx,  psy, 1) * 0.25;
+            ublas::row(X, 7) = math::Point3( 0,    psy, 1) * 0.50;
+            ublas::row(X, 8) = math::Point3( psx,  psy, 1) * 0.25;
+
             // target vector
+            Z(0) = v(1) * 0.25;
+            Z(1) = v(2) * 0.50;
+            Z(2) = v(3) * 0.25;
+            Z(3) = v(4) * 0.50;
+            Z(4) = v(5) * 1.00;
+            Z(5) = v(6) * 0.50;
+            Z(6) = v(7) * 0.25;
+            Z(7) = v(8) * 0.50;
+            Z(8) = v(9) * 0.25;
+
             // obtain result
+            ublas::matrix<float> xtx = ublas::prod(ublas::trans(X), X);
+
+            math::Point3f abd = ublas::prod(ublas::prod(
+                math::matrixInvert(xtx), ublas::trans(X)), Z);
+
+            LOGONCE(debug) << abd;
+
+            return normalize(math::Point3(-abd[0], -abd[1], -1));
         }
 
     private:
         const cv::Mat &mat;
-        int row, col;
         const double *row0, *row1, *row2;
+        math::Point2 resolution;
     };
 
 
     int width{size_.width}, height{size_.height};
 
-    // expect a single gray channel, sanity check, loda data
+    // expect a single gray channel, sanity check, load data
     expectGray();
     ut::expect(width >= 3 && height >= 3);
     assertData();
@@ -2425,8 +2464,9 @@ cv::Mat GeoDataset::exportNormalMap(
     // empty map
     cv::Mat normalMap = cv::Mat::zeros(data_->size(), CV_8UC3);
 
-    // compute normals for inner pixels
-    Window window(*data_);
+    // transformer
+    Window window(*data_, geoTransform_.resolution());
+
 
     for (int j = 1; j < height - 2; j++) {
         for (int i = 1; i < width - 2; i++ ) {
@@ -2448,23 +2488,29 @@ cv::Mat GeoDataset::exportNormalMap(
                     break;
             }
 
-            // we flip x and za coordinates to transform from image space
-            // to view space
+            // we flip y and z to transform from image space to view space
+            // we invert the ordering to follow the BGR order
+            // we encode (-1,1) -> (0,255)
             normalMap.at<cv::Vec3b>(j,i) =
-                cv::Vec3b( - normal[0], normal[1], - normal[2]);
+                cv::Vec3b(
+                    round(255 * 0.5 * (- normal[2] + 1)),
+                    round(255 * 0.5 * (- normal[1] + 1)),
+                    round(255 * 0.5 * (normal[0] + 1)));
 
             // next col
             window.incx();
         }
 
         // next row
-        window.incy();
+        window.row(j);
     }
 
     // replicate missing border values for safety
-    normalMap.at<cv::Vec3b>(0,0) = normalMap.at<cv::Vec3b>(1,1);
-    normalMap.at<cv::Vec3b>(width -1, height - 1)
-        = normalMap.at<cv::Vec3b>(width - 2 , height - 2);
+    /*cv::Mat pnormalMap;
+
+    cv::copyMakeBorder(
+        normalMap(cv::Range(1, height - 1),cv::Range(1, width - 1)),
+        pnormalMap, 1, 1, 1, 1, cv::BORDER_REPLICATE);*/
 
     // all done
     return normalMap;

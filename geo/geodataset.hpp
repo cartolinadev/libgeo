@@ -575,9 +575,12 @@ public:
      *
      * A normal map is a 3-channel 8-bit image of the same pixel size as
      * the underlying 1-channel dataset. Each pixel encodes a unit normal
-     * vector, with x, y, z and coordinates encoded in channels 0, 1, and 2
-     * respectively. The floating point nrmal values are mapped from
+     * vector, with x, y, z and coordinates encoded in channels 2, 1, and 0
+     * respectively. The floating point normal values are mapped from
      * (-1, 1) to (0, 255).
+     *
+     * Please note that the Z compoment is in the blue channel, which is
+     * channel 0 in the conventional OpenCV scheme.
      *
      * The normals are given in the (right-handed) view coordinates, with
      * the x axis to the right, y up, and z towards the viewer, but the image
