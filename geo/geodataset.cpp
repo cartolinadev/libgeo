@@ -2349,7 +2349,7 @@ cv::Mat GeoDataset::exportNormalMap(
         // move window 1px to the right
         void incx() {
 
-            row0++; row1 ++; row2++;
+            row0++; row1++; row2++;
         }
 
         /**
@@ -2469,6 +2469,10 @@ cv::Mat GeoDataset::exportNormalMap(
 
 
     for (int j = 1; j < height - 2; j++) {
+
+        // start row
+        window.row(j);
+
         for (int i = 1; i < width - 2; i++ ) {
 
             math::Point3 normal;
@@ -2502,7 +2506,6 @@ cv::Mat GeoDataset::exportNormalMap(
         }
 
         // next row
-        window.row(j);
     }
 
     // replicate missing border values for safety
