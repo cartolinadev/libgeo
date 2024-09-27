@@ -48,12 +48,17 @@ Enu::Enu(const math::Point3 &origin, const SrsDefinition &srs)
     if (!geog.IsGeographic()) {
         // extract geographic ref from this srs
         ::OGRSpatialReference tmp;
+
         if (tmp.CopyGeogCSFrom(&geog) != OGRERR_NONE) {
             LOGTHROW(err1, std::runtime_error)
                 << "Could not extract geographic SRS from definition \""
                 << srs << "\".";
         }
 
+#if GDAL_VERSION_NUM >= 3000000
+        // ensure that latitude comes first.
+        tmp.SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
+#endif
         // convert origin
         const CsConvertor conv(geog, tmp);
         o = conv(o);
