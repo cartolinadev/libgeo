@@ -32,6 +32,7 @@ if(GDAL_FOUND)
     gdal.hpp gdal.cpp
     vectorformat.hpp vectorformat.cpp
     landcover.hpp landcover.cpp
+    normalmap.hpp normalmap.cpp
   )
 
   if(NOT GDAL_VERSION)

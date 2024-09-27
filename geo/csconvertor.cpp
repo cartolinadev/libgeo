@@ -82,7 +82,7 @@ public:
 
 namespace {
 
-namespace ublas = boost::numeric::ublas;
+//namespace ublas = boost::numeric::ublas;
 
 typedef boost::optional<std::string> OptName;
 

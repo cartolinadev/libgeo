@@ -2332,7 +2332,7 @@ cv::Mat GeoDataset::exportNormalMap(
     class Window {
 
     public:
-        // initialize window cenered at 1,1 //
+        // initialize window centered at 1,1 //
         Window(const cv::Mat &mat, const math::Point2 & resolution)
             : mat(mat), resolution(resolution) {
 
