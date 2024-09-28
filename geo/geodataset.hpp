@@ -55,6 +55,7 @@
 
 #include "srsdef.hpp"
 #include "geotransform.hpp"
+#include "normalmap.hpp"
 
 namespace ublas = boost::numeric::ublas;
 
@@ -555,20 +556,7 @@ public:
         const math::Extents2 & extents,
         geometry::Mesh & omesh ) const;
 
-    /**
-     * @brief the hillshade algorithm
-     *
-     * See https://observablehq.com/@sahilchinoy/a-faster-hillshader
-     * or GDAL DEMProcessing source for explanation on Zevenbergen-Thorne
-     * and Horn.
-     *
-     * 8 point regression minimizes mean square error of a plane passing
-     * through the neighbouring points. The mean is weighted by the inverse
-     * distance of the point from the center point.
-     */
-    enum class HillshadeAlgo {
-        zevenbergenThorne, horn, regression
-    };
+    using HillshadeAlgo = normalmap::Algorithm;
 
     /**
      * @brief export a normal map

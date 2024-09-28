@@ -35,8 +35,25 @@
 
 namespace geo {
 
+namespace normalmap {
+
 /**
- * @brief crate a normal map from a dem with gien resolution
+  * @brief the hillshade algorithm
+  *
+  * See https://observablehq.com/@sahilchinoy/a-faster-hillshader
+  * or GDAL DEMProcessing source for explanation on Zevenbergen-Thorne
+  * and Horn.
+  *
+  * 8 point regression minimizes mean square error of a plane passing
+  * through the neighbouring points. The mean is weighted by the inverse
+  * distance of the point from the center point.
+  */
+enum class Algorithm {
+    zevenbergenThorne, horn, regression
+};
+
+/**
+ * @brief create a normal map from a dem with gien resolution
  * @param dem input dem
  * @param resolution input dem resolution
  * @param enuRf states if the ENU reference frame should be used in the output
@@ -49,6 +66,7 @@ namespace geo {
  */
 cv::Mat demToNormalMap(
     const cv::Mat& dem, math::Size2 &resolution,
+    const Algorithm& algorithm,
     const bool enuRf = true, const int depthType = CV_32F);
 
 /**
@@ -68,7 +86,7 @@ cv::Mat demToNormalMap(
  */
 
 
-void convertNormals(cv::Mat &normalMap, math::Extents2& extents,
+void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
     const CsConvertor& convertor);
 
 /**
@@ -77,7 +95,9 @@ void convertNormals(cv::Mat &normalMap, math::Extents2& extents,
  *
  * Note the RGB channel order (not the BGR, which is OpenCV default).
  */
-cv::Mat exportNormalsToRGB(const cv::Mat &normalMap);
+cv::Mat exportToRGB(const cv::Mat &normalMap);
+
+} // namespace normalmap
 
 } // namespace geo
 
