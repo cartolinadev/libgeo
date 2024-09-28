@@ -53,26 +53,26 @@ enum class Algorithm {
 };
 
 /**
- * @brief create a normal map from a dem with gien resolution
- * @param dem input dem
- * @param resolution input dem resolution
- * @param enuRf states if the ENU reference frame should be used in the output
- *  (which would make the matrix useful in OpenGL). If set to false, the
- *  east-south-downward frame (used by openCV) is used.
- * @param depthType the OpenCV depth type of the resulting three channel matrix
- * @return the resultant normal map, which is two pixels shorter from the input
- *  on each side. This is maninly laziness on my part - I have no use for the
- *  border values and computing them would induce both work and clutter.
+ * @brief create a normal map from a dem with given resolution
+ * @param dem input dem, expected to be a single channel 64-bit float matrix
+ * @param pixelSize size of pixel in input DEM
+ * @param viewspaceRF if true, output normals will be in view space (x axis
+ *  upward, z axis towards the viewer). If false, image space (y axis downward,
+ *  z axis away from the viewer) is used.
+ * @return the resultant three channel normal map, which is two pixels shorter
+ *  from the input on each side: the normal map is computed only for internal
+ *  pixels. The normals are normalized with their x, y and z values stored
+ *  in channels 0, 1 and 2 respectively. The resultant matrix type is CV_32FC3.
  */
-cv::Mat demToNormalMap(
-    const cv::Mat& dem, math::Size2 &resolution,
-    const Algorithm& algorithm,
-    const bool enuRf = true, const int depthType = CV_32F);
+cv::Mat demNormals(
+    const cv::Mat& dem, const math::Size2f& pixelSize,
+    const Algorithm& algorithm = Algorithm::zevenbergenThorne,
+    const bool viewspaceRf = true);
 
 /**
  * @brief convert a normal map to a different spatial reference.
  * @details For a normal map genereated via demToNormalMap, this function
- * converts normals from one (typically projected, identical to the original DEM)
+ * converts normals from one (typically projected, taken from the original DEM)
  * to another (typically physical) spatial reference system. Conversion is
  * performed in place.
  *
@@ -85,7 +85,6 @@ cv::Mat demToNormalMap(
  * @param convertor the convertor
  */
 
-
 void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
     const CsConvertor& convertor);
 
@@ -93,9 +92,18 @@ void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
  * Export a normal map to an 8-bit unsigned char RGB matrix. The components
  * of the normal are linearly scaled from the [-1.0, 1.0] range to [0.0-255.0].
  *
- * Note the RGB channel order (not the BGR, which is OpenCV default).
+ * Note the BGR channel (OpenCV default).
  */
-cv::Mat exportToRGB(const cv::Mat &normalMap);
+cv::Mat exportToBGR(const cv::Mat &normalMap);
+
+
+/**
+ * @brief Obtain a perefectly flat normal map. Used mainly for diagnostics.
+ */
+
+cv::Mat flatSurfaceNormals(const math::Size2& size,
+                           const int depthType = CV_32F);
+
 
 } // namespace normalmap
 

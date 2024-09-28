@@ -645,4 +645,29 @@ CsConvertor CsConvertor::clone() const
     return trans_->clone();
 }
 
+math::Matrix4 CsConvertor::linearize(const math::Point3 &at
+        , const math::Point3& d) const {
+
+    auto d0(d[0]), d1(d[1]), d2(d[2]);
+    std::vector<math::Point3> v(3);
+
+    math::Point3 fixed = trans_->convert(at);
+
+
+    v[0] = (trans_->convert(math::Point3{d0, 0, 0}) - fixed) / d0;
+    v[1] = (trans_->convert(math::Point3{0, d1 ,0}) - fixed) / d1;
+    v[2] = (trans_->convert(math::Point3{0, 0, d2}) - fixed) / d2;
+
+    math::Matrix4 ret = math::ublas::identity_matrix<double>(4,4);
+
+    for (int i=0; i < 3; i++) {
+
+        for (int j=0; j < 3; j++) ret(i, j) = v[j][i];
+        ret(i, 3) = fixed[i];
+    }
+
+    return ret;
+}
+
+
 } // namespace geo

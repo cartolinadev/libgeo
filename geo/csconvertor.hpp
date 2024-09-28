@@ -103,9 +103,23 @@ public:
      */
     CsConvertor clone() const;
 
+    /**
+     * @brief returns a first order approximation matrix of the convertor
+     * @details The homogeneous transformation matrix returned as a result
+     * provides a linear approximation of the convertor at a given point.
+     * The upper left 3x3 matrix corresponds to the HJacobian of the function
+     * defined by the conversion.
+     * @param at the point where the approximation is created
+     * @param differential the input diffferentials used to obtain the
+     *      Jacobian
+     */
+    math::Matrix4 linearize(const math::Point3 &at
+        , const math::Point3& differential = {1.0, 1.0, 1.0}) const;
+
     /** Returns true if convertor is valid.
      */
     operator bool() const;
+
 
     class Impl;
 
