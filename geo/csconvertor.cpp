@@ -136,9 +136,10 @@ initOgr(const OGRSpatialReference &from, const OptName &fromName
     }
     if(to.IsSame(toClone.get()) == FALSE)
     {
-        LOG(warn1) << "Dangerous promotion to 3D was necessary for: "
+        // this warning always fires on my system, demoted from warn3
+        /* LOG(warn1) << "Dangerous promotion to 3D was necessary for: "
                    << asName(to, toName) << " --> "
-                   << SrsDefinition::fromReference(*toClone.get());
+                   << SrsDefinition::fromReference(*toClone.get()); */
     }
     trans.reset(::OGRCreateCoordinateTransformation(fromClone.get(), toClone.get()));
 #else
@@ -652,11 +653,16 @@ math::Matrix4 CsConvertor::linearize(const math::Point3 &at
     std::vector<math::Point3> v(3);
 
     math::Point3 fixed = trans_->convert(at);
+    //LOGONCE(debug) << "source: " << at;
+    //LOGONCE(debug) << "dest: " << fixed;
 
 
-    v[0] = (trans_->convert(math::Point3{d0, 0, 0}) - fixed) / d0;
-    v[1] = (trans_->convert(math::Point3{0, d1 ,0}) - fixed) / d1;
-    v[2] = (trans_->convert(math::Point3{0, 0, d2}) - fixed) / d2;
+    v[0] = (trans_->convert(
+        math::Point3{at + math::Point3{d0, 0, 0}}) - fixed) / d0;
+    v[1] = (trans_->convert(
+        math::Point3{at + math::Point3{0, d1 ,0}}) - fixed) / d1;
+    v[2] = (trans_->convert(
+        math::Point3{at + math::Point3{0, 0, d2}}) - fixed) / d2;
 
     math::Matrix4 ret = math::ublas::identity_matrix<double>(4,4);
 

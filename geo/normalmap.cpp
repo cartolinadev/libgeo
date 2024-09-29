@@ -223,8 +223,9 @@ cv::Mat demNormals(
     return ret;
 }
 
+namespace {
 
-void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
+void convertNormalsLinear(cv::Mat &normalMap, const math::Extents2& extents,
     const CsConvertor& convertor) {
 
     auto& nm(normalMap);
@@ -239,6 +240,9 @@ void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
     );
 
     math::Matrix4 raster2geo = geo::raster2geo(extents, pxSize);
+
+    //LOGONCE(debug) << "extents: " << extents;
+    //LOGONCE(debug) << "raster2geo: " << raster2geo;
 
     auto m00 = convertor.linearize(subrange(
         prod(raster2geo, math::Point4{0, 0, 0, 1}), 0, 3));
@@ -255,27 +259,81 @@ void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
         // start and end of row trafo
         float posy = (float) i / (nm.rows - 1);
 
-        auto mi0 = (1 - posy) * m00 + posy * m10;
-        auto mi1 = (1 - posy) * m01 + posy * m11;
+        math::Matrix4 mi0 = (1 - posy) * m00 + posy * m10;
+        math::Matrix4 mi1 = (1 - posy) * m01 + posy * m11;
 
-        for (int j = 0; j< nm.cols;j++) {
+        //LOGONCE(debug) << "mi0: " << mi0;
+        //LOGONCE(debug) << "mi1: " << mi1;
+
+        for (int j = 0; j < nm.cols; j++) {
 
             // local trafo
             float posx = (float) j / (nm.cols - 1);
 
-            auto m = (1 - posx) * mi0 + posx * mi1;
+            math::Matrix4 m = (1 - posx) * mi0 + posx * mi1;
+
+            //LOGONCE(debug) << "local matrix:" << m;
 
             // transform in place
             cv::Vec3f on = nm.at<cv::Vec3f>(i, j);
+
             math::Point3 oldNormal(on(0), on(1), on(2));
+            //LOGONCE(debug) << "old normal: " << oldNormal;
 
             math::Point3 normal
                 = math::normalize(prod(subrange(m, 0, 3, 0, 3), oldNormal));
+            //LOGONCE(debug) << "normal: " << normal;
 
             nm.at<cv::Vec3f>(i, j) = cv::Vec3f(
                 normal[0], normal[1], normal[2]);
 
         }
+    }
+
+    // done
+}
+
+} // namespace
+
+void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
+    const CsConvertor& convertor, bool linearOptimization) {
+
+    auto& nm(normalMap);
+
+    if (linearOptimization) {
+        convertNormalsLinear(nm, extents, convertor);
+        return;
+    }
+
+    // non optimized conversion
+    math::Size2f pxSize(
+        (extents.ur[0] - extents.ll[0]) / nm.cols,
+        (extents.ur[1] - extents.ll[1]) / nm.rows
+    );
+
+    math::Matrix4 raster2geo = geo::raster2geo(extents, pxSize);
+
+    for (int i = 0; i < nm.rows; i++)
+        for (int j = 0; j < nm.cols; j++) {
+
+            // local linear transformation
+            auto m = convertor.linearize(subrange(
+                prod(raster2geo, math::Point4{
+                    (double) j, (double) i, 0, 1}), 0, 3));
+
+            // transform in place
+            cv::Vec3f on = nm.at<cv::Vec3f>(i, j);
+
+            math::Point3 oldNormal(on(0), on(1), on(2));
+            //LOGONCE(debug) << "old normal: " << oldNormal;
+
+            math::Point3 normal
+                = math::normalize(prod(subrange(m, 0, 3, 0, 3), oldNormal));
+            //LOGONCE(debug) << "normal: " << normal;
+
+            nm.at<cv::Vec3f>(i, j) = cv::Vec3f(
+                normal[0], normal[1], normal[2]);
+
     }
 
     // done
@@ -310,7 +368,7 @@ cv::Mat exportToBGR(const cv::Mat &normalMap) {
 
 cv::Mat flatSurfaceNormals(const math::Size2& size,
                            const int depthType) {
-    return cv::Mat(size.height, size.height,
+    return cv::Mat(size.height, size.width,
                    CV_MAKETYPE(depthType, 3), cv::Scalar(0.0, 0.0, 1.0));
 }
 

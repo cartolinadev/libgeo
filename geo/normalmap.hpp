@@ -76,17 +76,17 @@ cv::Mat demNormals(
  * to another (typically physical) spatial reference system. Conversion is
  * performed in place.
  *
- * For performance reasons, the supplied convertor is used only for corners of
- * the matrix, for the rest of the pixels a linear conversion is performed using
- * bilinear interpolation.
- *
  * @param normalMap the normal map for in-place conversion
  * @param extents extents in source SRS
  * @param convertor the convertor
+ * @param linearOptimization if true, the supplied convertor is used only for
+ *  corners of the matrix, for the rest of the pixels a linear conversion is
+ *  performed using bilinear interpolation. This makes sense unless the normal
+ *  map spans more than haf a hemisphere.
  */
 
 void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
-    const CsConvertor& convertor);
+    const CsConvertor& convertor, bool linearOptimization = true);
 
 /**
  * Export a normal map to an 8-bit unsigned char RGB matrix. The components
