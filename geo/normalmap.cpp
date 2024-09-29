@@ -177,13 +177,12 @@ cv::Mat demNormals(
     // transformer
     Window window(dem, pixelSize);
 
-
-    for (int j = 1; j < height - 2; j++) {
+    for (int j = 0; j < height - 2; j++) {
 
         // start row
-        window.row(j);
+        window.row(j + 1);
 
-        for (int i = 1; i < width - 2; i++ ) {
+        for (int i = 0; i < width - 2; i++ ) {
 
             math::Point3 normal;
 
