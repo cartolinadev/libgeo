@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright (c) 2017 Melown Technologies SE
  *
  * Redistribution and use in source and binary forms, with or without
@@ -211,12 +211,23 @@ public:
 
     virtual math::Point3 convert(const math::Point3 &p) const {
         double x(p(0)), y(p(1)), z(p(2));
+
+        //LOGONCE(debug) << "From: ";
+        //trans_->GetSourceCS()->dumpReadable();
+        //LOGONCE(debug) << "To: ";
+        //trans_->GetTargetCS()->dumpReadable();
+
+        //LOGONCE(debug) << "S: " << math::Point3(x,y,z);
+
         if (!(trans_->Transform(1, &x, &y, &z))) {
             LOGTHROW(err1, ProjectionError)
                 << "Cannot convert point " << std::fixed << p
                 << " between coordinate systems: <"
                 << ::CPLGetLastErrorMsg() << ">.";
         }
+
+        //LOGONCE(debug) << "T: " << math::Point3{x,y,z};
+
         return { x, y, z };
     }
 
@@ -319,6 +330,10 @@ initOgr2Enu(const OGRSpatialReference &from, const OptName &fromName
             " towgs84 must have either 3 or 7 elements.";
     }
 
+#if GDAL_VERSION_NUM >= 3000000
+    ll.SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
+#endif
+
     std::unique_ptr< ::OGRCoordinateTransformation>
         trans(inverse
               ? ::OGRCreateCoordinateTransformation
@@ -393,17 +408,20 @@ public:
     virtual math::Point3 convert(const math::Point3 &p) const {
         if (inverse_) {
             // ENU > lonlat
+
             GeographicLib::Math::real lat, lon, z;
             lc_.Reverse(p(0), p(1), p(2), lat, lon, z);
 
             // lonlat -> srs
             double xx(lon), yy(lat), zz(z);
+
             if (!(trans_->Transform(1, &xx, &yy, &zz))) {
                 LOGTHROW(err1, std::runtime_error)
                     << "Cannot convert point " << std::fixed << p
                     << " between coordinate systems (inverse): <"
                     << ::CPLGetLastErrorMsg() << ">.";
             }
+
             return { xx, yy, zz };
         }
 
@@ -539,8 +557,8 @@ initTrans(const Enu &from, const SrsDefinition &to)
 CsConvertor::CsConvertor(const SrsDefinition &from, const SrsDefinition &to)
     : trans_(initTrans(from, to))
 {
-    LOG(info1) << "Coordinate system transformation ("
-               << from << " -> " << to << ").";
+//    LOG(info1) << "Coordinate system transformation ("
+//               << from << " -> " << to << ").";
 }
 
 CsConvertor::CsConvertor(const SrsDefinition &from,
@@ -560,8 +578,8 @@ CsConvertor::CsConvertor(const OGRSpatialReference &from
                          , const OGRSpatialReference &to)
     : trans_(initTrans(from, to))
 {
-    LOG(info1) << "Coordinate system transformation ("
-               << asName(from) << " -> " << asName(to) << ").";
+//    LOG(info1) << "Coordinate system transformation ("
+//               << asName(from) << " -> " << asName(to) << ").";
 }
 
 CsConvertor::CsConvertor(const SrsDefinition &from
@@ -653,9 +671,6 @@ math::Matrix4 CsConvertor::linearize(const math::Point3 &at
     std::vector<math::Point3> v(3);
 
     math::Point3 fixed = trans_->convert(at);
-    //LOGONCE(debug) << "source: " << at;
-    //LOGONCE(debug) << "dest: " << fixed;
-
 
     v[0] = (trans_->convert(
         math::Point3{at + math::Point3{d0, 0, 0}}) - fixed) / d0;

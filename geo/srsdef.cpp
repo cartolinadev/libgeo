@@ -246,6 +246,9 @@ SrsDefinition SrsDefinition::fromEnu(const Enu &src)
     SrsDefinition dst;
     dst.type = Type::enu;
     dst.srs = boost::lexical_cast<std::string>(src);
+
+    //LOG(debug) << dst.srs;
+
     return dst;
 }
 
