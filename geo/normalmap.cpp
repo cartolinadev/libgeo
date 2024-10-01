@@ -36,15 +36,17 @@ namespace geo { namespace normalmap {
 cv::Mat demNormals(
     const cv::Mat& dem, const math::Size2f& pixelSize,
     const Algorithm& algorithm,
-    const bool viewspaceRf) {
+    const bool viewspaceRf, const bool invertRelief,
+    float zFactor) {
 
     /** the 3x3 moving window */
     class Window {
 
     public:
         // initialize window centered at 1,1 //
-        Window(const cv::Mat &mat, const math::Size2f& pixelSize)
-            : mat(mat), pixelSize(pixelSize) {
+        Window(const cv::Mat &mat, const math::Size2f& pixelSize,
+            const float zFactor)
+            : mat(mat), pixelSize(pixelSize), zFactor(zFactor) {
 
             row(1);
         }
@@ -98,10 +100,8 @@ cv::Mat demNormals(
 
             float psx(pixelSize.width), psy(pixelSize.height);
 
-            double a = 0.5 / psx * (v(6) - v(4));
-            double b = 0.5 / psy * (v(8) - v(2));
-
-            //LOGONCE(debug) << a << " " << b;
+            double a = zFactor * 0.5 / psx * (v(6) - v(4));
+            double b = zFactor * 0.5 / psy * (v(8) - v(2));
 
             return normalize(math::Point3(-a, -b, -1));
         }
@@ -110,9 +110,9 @@ cv::Mat demNormals(
 
             float psx(pixelSize.width), psy(pixelSize.height);
 
-            double a =  0.125 / psx
+            double a =  zFactor * 0.125 / psx
                 * (v(3) + 2 * v(6) + v(9) - v(1) - 2 * v(4) - v(7));
-            double b = 0.125 / psy
+            double b = zFactor * 0.125 / psy
                 * (v(7) + 2 * v(8) + v(9) - v(1) - 2 * v(2) - v(3));
 
             return normalize(math::Point3(-a, -b, -1));
@@ -153,15 +153,16 @@ cv::Mat demNormals(
             math::Point3f abd = ublas::prod(ublas::prod(
                 math::matrixInvert(xtx), ublas::trans(X)), Z);
 
-            LOGONCE(debug) << abd;
-
-            return normalize(math::Point3(-abd[0], -abd[1], -1));
+            //LOGONCE(debug) << abd;
+            return normalize(math::Point3(
+                zFactor * -abd[0], zFactor * -abd[1], -1));
         }
 
     private:
         const cv::Mat &mat;
         const double *row0, *row1, *row2;
         math::Size2f pixelSize;
+        float zFactor;
     };
 
 
@@ -175,7 +176,7 @@ cv::Mat demNormals(
     cv::Mat ret = cv::Mat::zeros(height - 2, width - 2,  CV_32FC3);
 
     // transformer
-    Window window(dem, pixelSize);
+    Window window(dem, pixelSize, zFactor);
 
     for (int j = 0; j < height - 2; j++) {
 
@@ -201,11 +202,15 @@ cv::Mat demNormals(
                     break;
             }
 
+            // optionally invert relief (flip dx and dy)
+            if (invertRelief) {
+                normal[0] = - normal[0]; normal[1] = - normal[1];
+            }
+
             // the normal is in image space,
             // we flip y and z to transform to view space if requested
             if  (viewspaceRf) {
-                normal[1] = - normal[1];
-                normal[2] = - normal[2];
+                normal[1] = - normal[1]; normal[2] = - normal[2];
             }
 
             ret.at<cv::Vec3f>(j,i) =
