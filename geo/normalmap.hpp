@@ -29,7 +29,8 @@
   * @author Ondrej Prochazka <ondrej.prochazka@montevallo.cz>
   *
   * Normal-map and bump-map generation from DEMs and grayscale images.
-  */
+ **/
+
 
 #ifndef geo_normalmaps_hpp_included
 #define geo_normalmaps_hpp_included
@@ -38,6 +39,7 @@
 #include <utility/expect.hpp>
 #include <geo/csconvertor.hpp>
 #include <utility/expect.hpp>
+#include <imgproc/rastermask.hpp>
 
 #include <opencv2/opencv.hpp>
 
@@ -85,16 +87,26 @@ struct Parameters {
  * @param dem input dem, of the same underlying value type as the first template
  *  argument
  * @param pixelSize size of pixel in input DEM
+ * @param params see above
+ * @param flatMask pixels matching this mask always yield upwards normal
+ * @param inversionMask pixels matching this mask are relief inverted, the
+ *  inversion is applied cumulatively to optional image-wid inversion as
+ *  specified by params.
  * @return the resultant three channel normal map, which is two pixels shorter
  *  from the input on each side: the normal map is computed only for internal
  *  pixels. The normals are normalized with their x, y and z values stored
  *  in channels 0, 1 and 2 respectively. The resultant matrix type is CV_32FC3.
  */
 
-template <typename value_type>
+template <typename value_type,
+          typename Mask1 = imgproc::quadtree::RasterMask,
+          typename Mask2 = imgproc::quadtree::RasterMask>
+
 cv::Mat demNormals(
     const cv::Mat& dem, const math::Size2f& pixelSize,
-    const Parameters& params = Parameters()) {
+    const Parameters& params,
+    const Mask1& flatMask,
+    const Mask2& inversionMask) {
 
     namespace ut = utility;
 
@@ -252,23 +264,36 @@ cv::Mat demNormals(
 
             math::Point3 normal;
 
-            switch (params.algorithm) {
+            if (flatMask.get(i + 1, j + 1)) {
 
-                case Algorithm::zevenbergenThorne:
-                    normal = window.zevenbergenThorne();
-                    break;
+                // flat area
+                normal = {0, 0, -1};
 
-                case Algorithm::horn:
-                    normal = window.horn();
-                    break;
+            } else {
 
-                case Algorithm::regression:
-                    normal = window.regression();
-                    break;
+                // compute normal
+                switch (params.algorithm) {
+
+                    case Algorithm::zevenbergenThorne:
+                        normal = window.zevenbergenThorne();
+                        break;
+
+                    case Algorithm::horn:
+                        normal = window.horn();
+                        break;
+
+                    case Algorithm::regression:
+                        normal = window.regression();
+                        break;
+                }
             }
 
             // optionally invert relief (flip dx and dy)
             if (params.invertRelief) {
+                normal[0] = - normal[0]; normal[1] = - normal[1];
+            }
+
+            if (inversionMask.get(i + 1, j + 1)) {
                 normal[0] = - normal[0]; normal[1] = - normal[1];
             }
 
@@ -290,6 +315,19 @@ cv::Mat demNormals(
 
     // all done
     return ret;
+}
+
+
+template <typename value_type,
+          typename Mask1 = imgproc::quadtree::RasterMask,
+          typename Mask2 = imgproc::quadtree::RasterMask>
+cv::Mat demNormals(
+    const cv::Mat& dem, const math::Size2f& pixelSize,
+    const Parameters& params = Parameters()) {
+
+    return demNormals<value_type>(dem, pixelSize, params,
+        Mask1(dem.cols, dem.rows, Mask1::EMPTY),
+        Mask2(dem.cols, dem.rows, Mask1::EMPTY));
 }
 
 
