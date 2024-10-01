@@ -40,7 +40,7 @@
 namespace geo {
 
 namespace ut = utility;
-namespace fs = boost::filesystem;
+//namespace fs = boost::filesystem;
 
 typedef ublas::matrix<float,ublas::row_major,
                       ublas::bounded_array<float, 4> > Matrix2;
