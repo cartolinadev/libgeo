@@ -24,6 +24,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+  * @file landcover.hpp
+  * @author Ondrej Prochazka <ondrej.prochazka@montevallo.cz>
+  *
+  * Normal-map and bump-map generation from DEMs and grayscale images.
+  */
+
 #ifndef geo_normalmaps_hpp_included
 #define geo_normalmaps_hpp_included
 
@@ -53,15 +60,29 @@ enum class Algorithm {
 };
 
 /**
- * @brief create a normal map from a DEM or graycale image with given resolution
- * @param dem input dem, expected to be a single channel 64-bit float matrix
- * @param pixelSize size of pixel in input DEM
+ * Parameters for demNormals.
+ * @param algorithm the hillshade (normal derivation) algorithm
  * @param viewspaceRF if true, output normals will be in view space (x axis
  *  upward, z axis towards the viewer). If false, image space (y axis downward,
  *  z axis away from the viewer) is used.
  * @param invertRelief states if the relief should be inverted, for image
  *  sources this means that darker tones are taken to be front (default for
  *  bump maps)
+ */
+
+struct Parameters {
+
+    Algorithm algorithm = Algorithm::zevenbergenThorne;
+    bool viewspaceRf = true;
+    bool invertRelief = false;
+    float zFactor = 1;
+};
+
+
+/**
+ * @brief create a normal map from a DEM or graycale image with given resolution
+ * @param dem input dem, expected to be a single channel 64-bit float matrix
+ * @param pixelSize size of pixel in input DEM
  * @return the resultant three channel normal map, which is two pixels shorter
  *  from the input on each side: the normal map is computed only for internal
  *  pixels. The normals are normalized with their x, y and z values stored
@@ -69,9 +90,7 @@ enum class Algorithm {
  */
 cv::Mat demNormals(
     const cv::Mat& dem, const math::Size2f& pixelSize,
-    const Algorithm& algorithm = Algorithm::zevenbergenThorne,
-    const bool viewspaceRf = true, const bool invertRelief = false,
-    float zFactor = 1.);
+    const Parameters& params = Parameters());
 
 /**
  * @brief convert a normal map to a different spatial reference.

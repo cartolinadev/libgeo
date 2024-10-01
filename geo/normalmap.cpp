@@ -35,9 +35,7 @@ namespace geo { namespace normalmap {
 
 cv::Mat demNormals(
     const cv::Mat& dem, const math::Size2f& pixelSize,
-    const Algorithm& algorithm,
-    const bool viewspaceRf, const bool invertRelief,
-    float zFactor) {
+    const Parameters& params) {
 
     /** the 3x3 moving window */
     class Window {
@@ -110,7 +108,7 @@ cv::Mat demNormals(
 
             float psx(pixelSize.width), psy(pixelSize.height);
 
-            double a =  zFactor * 0.125 / psx
+            double a = zFactor * 0.125 / psx
                 * (v(3) + 2 * v(6) + v(9) - v(1) - 2 * v(4) - v(7));
             double b = zFactor * 0.125 / psy
                 * (v(7) + 2 * v(8) + v(9) - v(1) - 2 * v(2) - v(3));
@@ -176,7 +174,7 @@ cv::Mat demNormals(
     cv::Mat ret = cv::Mat::zeros(height - 2, width - 2,  CV_32FC3);
 
     // transformer
-    Window window(dem, pixelSize, zFactor);
+    Window window(dem, pixelSize, params.zFactor);
 
     for (int j = 0; j < height - 2; j++) {
 
@@ -187,7 +185,7 @@ cv::Mat demNormals(
 
             math::Point3 normal;
 
-            switch (algorithm) {
+            switch (params.algorithm) {
 
                 case Algorithm::zevenbergenThorne:
                     normal = window.zevenbergenThorne();
@@ -203,13 +201,13 @@ cv::Mat demNormals(
             }
 
             // optionally invert relief (flip dx and dy)
-            if (invertRelief) {
+            if (params.invertRelief) {
                 normal[0] = - normal[0]; normal[1] = - normal[1];
             }
 
             // the normal is in image space,
             // we flip y and z to transform to view space if requested
-            if  (viewspaceRf) {
+            if  (params.viewspaceRf) {
                 normal[1] = - normal[1]; normal[2] = - normal[2];
             }
 
