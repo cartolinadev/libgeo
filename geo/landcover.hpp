@@ -37,16 +37,20 @@
 
 #include <boost/core/noncopyable.hpp>
 #include <memory>
+#include <unordered_map>
 
 #include <boost/optional.hpp>
 #include <boost/filesystem/path.hpp>
 #include <opencv2/core/core.hpp>
+#include <jsoncpp/json.hpp>
 
 #include <imgproc/rastermask.hpp>
 
 #include "geodataset.hpp"
 
 namespace geo {
+
+namespace landcover {
 
 /**
   * Defines BGR color for each landcover class as a linear function of two
@@ -113,6 +117,53 @@ private:
 
     std::unique_ptr<Detail> detail;
 };
+
+
+/**
+ * @brief landcover class definition, with assorted attributes.
+ *
+ * @details landcover class has an integer id (which normally corresponds
+ *  the the colormap index in a landcover dataset) and a human readable
+ *  name. The remaining parameters are used by various landcover applications.
+ */
+
+struct ClassDefinition {
+
+    uchar id;
+    std::string name;
+
+    // used to create normal map inversion masks
+    uchar zIndex, expectedLuma;
+
+    // used for specular maps
+    float specularReflectivity = 0.0;
+    float shininess = 1.0;
+
+    // used for normal maps over water
+    bool isFlat = false;
+};
+
+typedef std::unordered_map<uchar, ClassDefinition> Classes;
+
+/**
+ * @brief read class defnition from a Json object
+ */
+
+Classes fromJson(const Json::Value &object);
+
+/**
+ * @brief obtain flat area mask from landcover and class definition
+ */
+
+imgproc::RasterMask flatMask(const cv::Mat& landcover,
+                            const Classes& classes);
+
+/* obtain normal map inversion mask from landcover and class definition */
+
+imgproc::RasterMask inversionMask(const cv::Mat &landcover,
+                                 const Classes &classes);
+
+} // namespace landcover
 
 } // namespace geo
 

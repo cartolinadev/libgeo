@@ -36,8 +36,11 @@
 
 #include "utility/expect.hpp"
 #include "boost/filesystem/path.hpp"
+#include "jsoncpp/as.hpp"
 
 namespace geo {
+
+namespace landcover {
 
 namespace ut = utility;
 //namespace fs = boost::filesystem;
@@ -227,6 +230,65 @@ BivariateLandcover BivariateLandcover::loadCsv(
     return result;
 }
 
+// class ClassDefinition
 
+Classes fromJson(const Json::Value &object) {
+
+    Classes retval;
+
+    for (const auto& jclass: object) {
+
+        ClassDefinition class_;
+
+        // compulsory elements
+        get(class_.id, jclass, "id");
+        get(class_.name, jclass, "name");
+
+        // optional elements
+        getOpt(class_.zIndex, jclass, "z-index");
+        getOpt(class_.expectedLuma, jclass, "expected-luma");
+        getOpt(class_.specularReflectivity, jclass, "specular-reflectivity");
+        getOpt(class_.shininess, jclass, "shininess");
+        getOpt(class_.isFlat, jclass, "isFlat");
+
+        // add class
+        retval[class_.id] = class_;
+    }
+
+    return retval;
+}
+
+imgproc::RasterMask flatMask(const cv::Mat& landcover,
+                            const Classes& classes) {
+
+    imgproc::RasterMask mask(landcover.cols, landcover.rows,
+                             imgproc::RasterMask::EMPTY);
+
+    // iterate through landcover, checking for pixels with isFlat classes
+    for (int i = 0; i < landcover.rows; i++) {
+
+        auto row = landcover.ptr<uchar>(i);
+
+        for (int j = 0; j < landcover.cols; j++) {
+
+            if (classes.at(*row).isFlat) mask.set(j, i);
+            row++;
+        }
+    }
+
+    // done
+    return mask;
+}
+
+imgproc::RasterMask inversionMask(const cv::Mat &landcover,
+                                 const Classes &) {
+
+    imgproc::RasterMask mask(landcover.cols, landcover.rows,
+                             imgproc::RasterMask::EMPTY);
+
+    return mask;
+}
+
+} // namespace landcover
 
 } // namespace geo
