@@ -32,7 +32,8 @@
 
 #include <unordered_map>
 
-#include <Eigen/Dense>
+//#include <Eigen/Dense>
+
 
 #include "utility/expect.hpp"
 #include "boost/filesystem/path.hpp"
@@ -259,7 +260,7 @@ Classes fromJson(const Json::Value &object) {
 }
 
 imgproc::RasterMask flatMask(const cv::Mat& landcover,
-                            const Classes& classes) {
+                            const Classes& classdef) {
 
     imgproc::RasterMask mask(landcover.cols, landcover.rows,
                              imgproc::RasterMask::EMPTY);
@@ -271,7 +272,7 @@ imgproc::RasterMask flatMask(const cv::Mat& landcover,
 
         for (int j = 0; j < landcover.cols; j++) {
 
-            if (classes.at(*row).isFlat) mask.set(j, i);
+            if (classdef.at(*row).isFlat) mask.set(j, i);
             row++;
         }
     }
@@ -281,10 +282,143 @@ imgproc::RasterMask flatMask(const cv::Mat& landcover,
 }
 
 imgproc::RasterMask inversionMask(const cv::Mat &landcover,
-                                 const Classes &) {
+                                 const Classes& classdef) {
 
+    /** the 3x3 moving window */
+    class Window {
+
+    public:
+        // initialize window centered at 1,1 //
+        Window(const cv::Mat &mat, const Classes& classdef)
+            : mat(mat), classdef(classdef) { row(1); }
+
+        // move window to the beginning of the row
+        void row(int i) {
+
+            row0 = mat.ptr<uchar>(i - 1);
+            row1 = mat.ptr<uchar>(i);
+            row2 = mat.ptr<uchar>(i + 1);
+        }
+
+        // move window 1px to the right
+        void incx() {
+            row0++; row1++; row2++;
+        }
+
+        void updateCell() {
+
+            auto& cct(currentCellType);
+
+            cct = CellType::neutral;
+
+            std::set<uchar> wclasses;
+
+            for (int i = 1; i <= 9; i++) wclasses.insert(v(i));
+
+            if (wclasses.size() != 2) return;
+
+            auto a = classdef.at(*wclasses.begin()),
+                 b = classdef.at(*wclasses.rbegin());
+
+            if ((a.zIndex - b.zIndex) * (a.expectedLuma - b.expectedLuma) > 0)
+                cct = CellType::regular;
+            else
+                cct = CellType::inverted;
+
+        }
+
+        bool regular() const {
+            return (currentCellType == CellType::regular);
+        }
+
+        bool inverted() const {
+            return (currentCellType == CellType::inverted);
+        }
+
+    private:
+
+        enum class CellType { neutral, regular, inverted };
+
+        double v(uint index) const {
+
+            switch(index) {
+
+                case 1: return row0[0];
+                case 2: return row0[1];
+                case 3: return row0[2];
+                case 4: return row1[0];
+                case 5: return row1[1];
+                case 6: return row1[2];
+                case 7: return row2[0];
+                case 8: return row2[1];
+                case 9: return row2[2];
+                default: return 0; // never reached
+            }
+        }
+
+
+        CellType currentCellType;
+        const cv::Mat &mat;
+        const uchar *row0, *row1, *row2;
+        const Classes& classdef;
+    };
+
+
+    // initialize, sanity
+    auto& lc(landcover);
+
+    ut::expect(landcover.type() == CV_8UC1);
+    ut::expect(lc.cols >= 3 && lc.rows >= 3);
+
+    Window window(lc, classdef);
+
+    // find regular and inverted 2-class boundaries
+    auto regularMap = cv::Mat(lc.rows, lc.cols, CV_8U, cv::Scalar(255));
+    auto invertedMap = cv::Mat(lc.rows, lc.cols, CV_8U, cv::Scalar(255));
+
+    for (int i = 1; i < lc.rows - 1; i++) {
+
+        window.row(i);
+
+        for (int j = 1; j < lc.cols - 1; j++) {
+
+            window.updateCell();
+            if (window.regular()) regularMap.at<uchar>(i, j) = 0;
+            if (window.inverted()) invertedMap.at<uchar>(i, j) = 0;
+
+            // next col
+            window.incx();
+        }
+    }
+
+    //cv::imwrite("regular.png", regularMap);
+    //cv::imwrite("inverted.png", invertedMap);
+
+    // distance transform
+    cv::Mat distanceR, distanceI;
+
+    cv::distanceTransform(regularMap, distanceR, cv::DIST_L1, 3, CV_8U);
+    cv::distanceTransform(invertedMap, distanceI, cv::DIST_L1, 3, CV_8U);
+
+    cv::Mat im(landcover.rows, landcover.cols, CV_8UC1, cv::Scalar(0));
+
+    /*for (int i = 0; i < im.rows; i++)
+        for (int j = 0; j < im.cols; j++)
+            im.at<uchar>(i,j)
+                = distanceI.at<uchar>(i,j) < distanceR.at<uchar>(i,j) ? 0xff: 0;
+
+    cv::imwrite("mask.png", im); */
+
+    // the mask
     imgproc::RasterMask mask(landcover.cols, landcover.rows,
-                             imgproc::RasterMask::EMPTY);
+                imgproc::RasterMask::EMPTY);
+
+    for (int i = 0; i < im.rows; i++)
+        for (int j = 0; j < im.cols; j++) {
+
+            if (distanceI.at<uchar>(i,j) < distanceR.at<uchar>(i,j))
+                mask.set(j,i);
+        }
 
     return mask;
 }
