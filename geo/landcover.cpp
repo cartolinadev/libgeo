@@ -272,7 +272,9 @@ imgproc::RasterMask flatMask(const cv::Mat& landcover,
 
         for (int j = 0; j < landcover.cols; j++) {
 
-            if (classdef.at(*row).isFlat) mask.set(j, i);
+            auto it = classdef.find(*row);
+            if (it != classdef.end() && it->second.isFlat) mask.set(j, i);
+
             row++;
         }
     }
