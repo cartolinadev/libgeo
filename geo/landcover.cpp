@@ -249,7 +249,7 @@ Classes fromJson(const Json::Value &object) {
         getOpt(class_.zIndex, jclass, "z-index");
         getOpt(class_.expectedLuma, jclass, "expected-luma");
         getOpt(class_.specularReflectivity, jclass, "specular-reflectivity");
-        getOpt(class_.shininess, jclass, "shininess");
+        getOpt(class_.shininessExp, jclass, "shininess-exp");
         getOpt(class_.isFlat, jclass, "isFlat");
 
         // add class
@@ -424,6 +424,38 @@ imgproc::RasterMask inversionMask(const cv::Mat &landcover,
 
     return mask;
 }
+
+cv::Mat specularMap(const cv::Mat &landcover, const Classes &classdef,
+                    uchar shininessBits) {
+
+    ut::expect(landcover.type() == CV_8UC1, "Unsupported landcover image type");
+
+    cv::Mat ret = cv::Mat::zeros(landcover.rows, landcover.cols, CV_8UC1);
+
+    for (int i = 0; i < landcover.rows; i++) {
+
+        auto src = landcover.ptr<uchar>(i);
+        auto dst = ret.ptr<uchar>(i);
+
+        for (int j = 0; j < landcover.cols; j++) {
+
+            auto it = classdef.find(*src);
+
+            if (it != classdef.end()) {
+
+                uchar reflectivity = it->second.specularReflectivity;
+                uchar shininessExp = it->second.shininessExp;
+
+                *dst = (reflectivity << shininessBits) |  shininessExp;
+            }
+
+            src++; dst++;
+        }
+    }
+
+    return ret;
+}
+
 
 } // namespace landcover
 

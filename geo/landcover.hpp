@@ -135,9 +135,11 @@ struct ClassDefinition {
     // used to create normal map inversion masks
     uchar zIndex, expectedLuma;
 
-    // used for specular maps
-    float specularReflectivity = 0.0;
-    float shininess = 1.0;
+    // used for specular maps, 0-15, 0 is none, 16 is maxium
+    uchar specularReflectivity = 0;
+
+    // used for specular maps, 0-15, shininess = 2 * (0.5 * shininessExp);
+    uchar shininessExp = 0;
 
     // used for normal maps over water
     bool isFlat = false;
@@ -162,6 +164,15 @@ imgproc::RasterMask flatMask(const cv::Mat& landcover,
 
 imgproc::RasterMask inversionMask(const cv::Mat &landcover,
                                  const Classes &classes);
+
+/**
+ * @brief create a grayscale specular map image from a landcover dataset based
+ *  on reflectivity and shininess info in class definition.
+ * @param landcover type needs to be CV_8UC1. */
+
+cv::Mat specularMap(const cv::Mat &landcover, const Classes &classes,
+                    uchar shininessBits = 4);
+
 
 } // namespace landcover
 
