@@ -833,11 +833,15 @@ void FeatureLayers::dumpVTSGeodata(std::ostream & os
 
                 auto &jpoint = jpoints.append(Json::objectValue);
 
-                // id and properties
+                // id
                 jpoint["id"] = point.id;
 
                 auto & properties = jpoint["properties"] = Json::objectValue;
-
+                
+                // the upstream feature id, as id_ by convention 
+                properties["id_"] = std::to_string(point.fid);
+                
+                // properties
                 for (const auto & property: point.properties)
                     properties[property.first] = property.second;
 
@@ -858,12 +862,16 @@ void FeatureLayers::dumpVTSGeodata(std::ostream & os
                 auto &jmultilinestring
                     = jmultilinestrings.append(Json::objectValue);
 
-                // id and properties
+                // id
                 jmultilinestring["id"] = multilinestring.id;
 
                 auto & properties
                     = jmultilinestring["properties"] = Json::objectValue;
 
+                // the upstream feature id, as id_ by convention 
+                properties["id_"] = std::to_string(multilinestring.fid);
+                
+                // properties
                 for (const auto & property: multilinestring.properties)
                     properties[property.first] = property.second;
 
@@ -902,6 +910,10 @@ void FeatureLayers::dumpVTSGeodata(std::ostream & os
 
                 auto & properties = jsurface["properties"] = Json::objectValue;
 
+                // the upstream feature id, as id_ by convention 
+                properties["id_"] = std::to_string(surface.fid);
+                
+                // properties
                 for (const auto & property: surface.properties)
                     properties[property.first] = property.second;
 

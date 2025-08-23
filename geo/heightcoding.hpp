@@ -52,6 +52,11 @@ UTILITY_GENERATE_ENUM(Mode,
                       ((auto_)("auto")) // touch only 2d points
                       )
 
+UTILITY_GENERATE_ENUM(Schema,
+  ((maptiler))	// openmaptiles, with id = osm_id (not guaranteed by schema)
+  ((planetiler)) // openmaptiles with id = osm_id * 10 + t
+  )
+
 struct OutputSrs {
     SrsDefinition srs;
     bool adjustVertical;
@@ -121,6 +126,10 @@ struct Config {
     /** Heightcoding mode
      */
     Mode mode;
+    
+    /** id schema used in input
+      */
+    Schema schema;
 
     /** Called just before serialization if non-null.
      */
@@ -128,7 +137,7 @@ struct Config {
 
     Config()
         : outputVerticalAdjust(false), format(VectorFormat::geodataJson)
-        , mode(Mode::auto_)
+        , mode(Mode::auto_), schema(Schema::maptiler)
     {}
 };
 
