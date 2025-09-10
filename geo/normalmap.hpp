@@ -25,7 +25,7 @@
  */
 
 /**
-  * @file landcover.hpp
+  * @file normalmap.hpp
   * @author Ondrej Prochazka <ondrej.prochazka@montevallo.cz>
   *
   * Normal-map and bump-map generation from DEMs and grayscale images.
@@ -83,7 +83,8 @@ struct Parameters {
 
 
 /**
- * @brief create a normal map from a DEM or graycale image with given resolution
+ * Create a normal map from a DEM or graycale image with given resolution.
+ *
  * @param dem input dem, of the same underlying value type as the first template
  *  argument
  * @param pixelSize size of pixel in input DEM
@@ -332,11 +333,12 @@ cv::Mat demNormals(
 
 
 /**
- * @brief convert a normal map to a different spatial reference.
- * @details For a normal map genereated via demToNormalMap, this function
+ * Convert a normal map to a different spatial reference.
+ *
+ * For a normal map genereated via demToNormalMap, this function
  * converts normals from one (typically projected, taken from the original DEM)
  * to another (typically physical) spatial reference system. Conversion is
- * performed in place.
+ * performed in place and the normal map is expected to be of type CV_32FC3.
  *
  * @param normalMap the normal map for in-place conversion
  * @param extents extents in source SRS
@@ -351,8 +353,25 @@ void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
     const CsConvertor& convertor, bool linearOptimization = true);
 
 /**
+ * Encode a normal map using octahedron 2-channel encoding.
+ *
+ * The map is converted in place and the RG values are stored in first and
+ * second channels, with third channel optionally nullified.
+ *
+ * normalMap is expected to be of type CV_32FC3, and the normals are expected
+ * to be unit vectors.
+ *
+ * @param normalMap normal map, encoded in place
+ */
+
+void encodeOct(cv::Mat &normalMap);
+
+
+/**
  * Export a normal map to an 8-bit unsigned char RGB matrix. The components
  * of the normal are linearly scaled from the [-1.0, 1.0] range to [0.0-255.0].
+ *
+ * Normal map is expected to be of type CV_32FC3.
  *
  * Note the BGR channel (OpenCV default).
  */
@@ -360,7 +379,8 @@ cv::Mat exportToBGR(const cv::Mat &normalMap);
 
 
 /**
- * @brief Obtain a perefectly flat normal map. Used mainly for diagnostics.
+ * Obtain a perfectly flat normal map with (0,0,1) values.
+ * Used mainly for diagnostics.
  */
 
 cv::Mat flatSurfaceNormals(const math::Size2& size,

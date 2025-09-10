@@ -40,9 +40,6 @@ void convertNormalsLinear(cv::Mat &normalMap, const math::Extents2& extents,
 
     auto& nm(normalMap);
 
-    // we work only 32bit floats
-    ut::expect(nm.type() == CV_32FC3, "3-channel 32bit matrix expected");
-
     // obtain first order linearizations in matrix corners
     math::Size2f pxSize(
         (extents.ur[0] - extents.ll[0]) / nm.cols,
@@ -110,6 +107,10 @@ void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
 
     auto& nm(normalMap);
 
+    // we work only 32bit floats
+    ut::expect(nm.type() == CV_32FC3, "3-channel 32bit matrix expected");
+
+    // optimized conversion
     if (linearOptimization) {
         convertNormalsLinear(nm, extents, convertor);
         return;
@@ -147,6 +148,51 @@ void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
     }
 
     // done
+}
+
+void encodeOct(cv::Mat &normalMap) {
+
+    auto& nm(normalMap);
+
+    // we need the "sign not zero" which, unlike math::sgn, is 1 at 0
+    auto sgn = [](float arg) {
+        return arg >= 0.f ? 1 : -1;
+    };
+
+    constexpr float Eps = 1e-08;
+
+    // we work only 32bit floats
+    ut::expect(nm.type() == CV_32FC3, "3-channel 32bit matrix expected");
+
+    for (int i = 0; i < nm.rows; i++)
+        for (int j = 0; j < nm.cols; j++) {
+
+            auto& normal = nm.at<cv::Vec3f>(i, j);
+
+            // octahedron encoding
+            // https://brashandplucky.com/2022/07/07/octahedron-unitvector-encoding.html
+
+            auto l1n = cv::norm(normal, cv::NORM_L1);
+
+            if (! std::isfinite(l1n) || l1n < Eps) {
+                LOG(warn1) << "Invalid (non-unit) vector.";
+                nm.at<cv::Vec3f>(i,j) = {0.f,0.f,0.f};
+                continue;
+            }
+
+
+            normal /= l1n;
+
+            if (normal[2] < 0.0f) {
+
+
+                auto tmp = (1.0f - std::fabs(normal[1])) * sgn(normal[0]);
+                normal[1] = (1.0f - std::fabs(normal[0])) * sgn(normal[1]);
+                normal[0] = tmp;
+            }
+
+            normal[2] = 0.0f;
+    }
 }
 
 cv::Mat exportToBGR(const cv::Mat &normalMap) {
