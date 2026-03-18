@@ -107,7 +107,7 @@ public:
      * @brief returns a first order approximation matrix of the convertor
      * @details The homogeneous transformation matrix returned as a result
      * provides a linear approximation of the convertor at a given point.
-     * The upper left 3x3 matrix corresponds to the HJacobian of the function
+     * The upper left 3x3 matrix corresponds to the Jacobian of the function
      * defined by the conversion.
      * @param at the point where the approximation is created
      * @param differential the input diffferentials used to obtain the
@@ -119,7 +119,6 @@ public:
     /** Returns true if convertor is valid.
      */
     operator bool() const;
-
 
     class Impl;
 

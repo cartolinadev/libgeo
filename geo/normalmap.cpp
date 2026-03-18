@@ -38,6 +38,8 @@ namespace {
 void convertNormalsLinear(cv::Mat &normalMap, const math::Extents2& extents,
     const CsConvertor& convertor) {
 
+    using namespace math;
+
     auto& nm(normalMap);
 
     // obtain first order linearizations in matrix corners
@@ -46,19 +48,26 @@ void convertNormalsLinear(cv::Mat &normalMap, const math::Extents2& extents,
         (extents.ur[1] - extents.ll[1]) / nm.rows
     );
 
-    math::Matrix4 raster2geo = geo::raster2geo(extents, pxSize);
+    Matrix4 raster2geo = geo::raster2geo(extents, pxSize);
 
     //LOGONCE(debug) << "extents: " << extents;
     //LOGONCE(debug) << "raster2geo: " << raster2geo;
 
-    auto m00 = convertor.linearize(subrange(
-        prod(raster2geo, math::Point4{0, 0, 0, 1}), 0, 3));
-    auto m01 = convertor.linearize(subrange(
-        prod(raster2geo, math::Point4{nm.cols - 1.0, 0, 0, 1}), 0, 3));
-    auto m10 = convertor.linearize(subrange(
-        prod(raster2geo, math::Point4{0, nm.rows -1.0, 0, 1}), 0, 3));
-    auto m11 = convertor.linearize(subrange(
-        prod(raster2geo, math::Point4{nm.cols - 1., nm.rows - 1., 0, 1}), 0, 3));
+    auto iconv = convertor.inverse();
+
+    auto phys00 = iconv(
+        Point3(prod(raster2geo, Point4{0., 0., 0., 1.})));
+    auto phys01 = iconv(
+        Point3(prod(raster2geo, Point4{nm.cols - 1., 0., 0., 1.})));
+    auto phys10 = iconv(
+        Point3(prod(raster2geo, Point4{0., nm.rows - 1., 0., 1.})));
+    auto phys11 = iconv(
+        Point3(prod(raster2geo, Point4{nm.cols - 1., nm.rows - 1., 0., 1.})));
+
+    auto m00 = Matrix4(trans(convertor.linearize(phys00)));
+    auto m01 = Matrix4(trans(convertor.linearize(phys01)));
+    auto m10 = Matrix4(trans(convertor.linearize(phys10)));
+    auto m11 = Matrix4(trans(convertor.linearize(phys11)));
 
     // iterate through matrix cells
     for (int i = 0; i < nm.rows; i++) {
@@ -66,8 +75,8 @@ void convertNormalsLinear(cv::Mat &normalMap, const math::Extents2& extents,
         // start and end of row trafo
         float posy = (float) i / (nm.rows - 1);
 
-        math::Matrix4 mi0 = (1 - posy) * m00 + posy * m10;
-        math::Matrix4 mi1 = (1 - posy) * m01 + posy * m11;
+        Matrix4 mi0 = (1 - posy) * m00 + posy * m10;
+        Matrix4 mi1 = (1 - posy) * m01 + posy * m11;
 
         //LOGONCE(debug) << "mi0: " << mi0;
         //LOGONCE(debug) << "mi1: " << mi1;
@@ -77,17 +86,17 @@ void convertNormalsLinear(cv::Mat &normalMap, const math::Extents2& extents,
             // local trafo
             float posx = (float) j / (nm.cols - 1);
 
-            math::Matrix4 m = (1 - posx) * mi0 + posx * mi1;
+            Matrix4 m = (1 - posx) * mi0 + posx * mi1;
 
             //LOGONCE(debug) << "local matrix:" << m;
 
             // transform in place
             cv::Vec3f on = nm.at<cv::Vec3f>(i, j);
 
-            math::Point3 oldNormal(on(0), on(1), on(2));
+            Point3 oldNormal(on(0), on(1), on(2));
             //LOGONCE(debug) << "old normal: " << oldNormal;
 
-            math::Point3 normal
+            Point3 normal
                 = math::normalize(prod(subrange(m, 0, 3, 0, 3), oldNormal));
             //LOGONCE(debug) << "normal: " << normal;
 
@@ -104,6 +113,10 @@ void convertNormalsLinear(cv::Mat &normalMap, const math::Extents2& extents,
 
 void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
     const CsConvertor& convertor, bool linearOptimization) {
+
+    //LOG(debug) << (linearOptimization
+    //    ? "Converting normals with linear optimization."
+    //    : "Converting normals without optimization.");
 
     auto& nm(normalMap);
 
@@ -123,14 +136,18 @@ void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
     );
 
     math::Matrix4 raster2geo = geo::raster2geo(extents, pxSize);
-
+    auto iconv = convertor.inverse();
+    
     for (int i = 0; i < nm.rows; i++)
         for (int j = 0; j < nm.cols; j++) {
 
             // local linear transformation
-            auto m = convertor.linearize(subrange(
-                prod(raster2geo, math::Point4{
-                    (double) j, (double) i, 0, 1}), 0, 3));
+            auto phys = iconv(math::Point3(prod(raster2geo,
+                math::Point4{(double) j, (double) i, 0., 1.})));
+
+            auto m = math::Matrix4(trans(convertor.linearize(phys)));
+
+            LOGONCE(debug) << "m: " << m;
 
             // transform in place
             cv::Vec3f on = nm.at<cv::Vec3f>(i, j);
@@ -179,7 +196,6 @@ void encodeOct(cv::Mat &normalMap) {
                 nm.at<cv::Vec3f>(i,j) = {0.f,0.f,0.f};
                 continue;
             }
-
 
             normal /= l1n;
 

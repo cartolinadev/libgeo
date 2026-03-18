@@ -333,16 +333,20 @@ cv::Mat demNormals(
 
 
 /**
- * Convert a normal map to a different spatial reference.
+ * @brief Convert a normal map to a different spatial reference.
  *
  * For a normal map genereated via demToNormalMap, this function
  * converts normals from one (typically projected, taken from the original DEM)
  * to another (typically physical) spatial reference system. Conversion is
  * performed in place and the normal map is expected to be of type CV_32FC3.
  *
+ * Note that the convertor is expected to be inverse of the desired SRS 
+ * transformation, i.e. it transforms from the target to the source SRS. This
+ * allows for more efficient conversion. 
+ *
  * @param normalMap the normal map for in-place conversion
  * @param extents extents in source SRS
- * @param convertor the convertor
+ * @param convertor the inverse convertor
  * @param linearOptimization if true, the supplied convertor is used only for
  *  corners of the matrix, for the rest of the pixels a linear conversion is
  *  performed using bilinear interpolation. This makes sense unless the normal
