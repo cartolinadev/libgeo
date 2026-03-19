@@ -167,6 +167,25 @@ void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
     // done
 }
 
+void convertNormals(cv::Mat &normalMap
+                    , const math::Matrix3 &orthonormalTransform)
+{
+    auto &nm(normalMap);
+
+    ut::expect(nm.type() == CV_32FC3, "3-channel 32bit matrix expected");
+
+    for (int i = 0; i < nm.rows; ++i) {
+        for (int j = 0; j < nm.cols; ++j) {
+            const auto on(nm.at<cv::Vec3f>(i, j));
+            const math::Point3 oldNormal(on(0), on(1), on(2));
+            const math::Point3 normal(prod(orthonormalTransform, oldNormal));
+
+            nm.at<cv::Vec3f>(i, j)
+                = cv::Vec3f(normal[0], normal[1], normal[2]);
+        }
+    }
+}
+
 void encodeOct(cv::Mat &normalMap) {
 
     auto& nm(normalMap);

@@ -357,6 +357,21 @@ void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
     const CsConvertor& convertor, bool linearOptimization = true);
 
 /**
+ * Convert normal map vectors by an orthonormal basis transform.
+ *
+ * Conversion is performed in place and the normal map is expected to be of
+ * type CV_32FC3. The supplied matrix is assumed to be orthonormal and is
+ * interpreted as a basis-change/rotation transform for normals, not as a
+ * generic linear transformation.
+ *
+ * @param normalMap the normal map for in-place conversion
+ * @param orthonormalTransform orthonormal basis transform applied to every
+ *  normal in the map
+ */
+void convertNormals(cv::Mat &normalMap
+                    , const math::Matrix3 &orthonormalTransform);
+
+/**
  * Encode a normal map using octahedron 2-channel encoding.
  *
  * The map is converted in place and the RG values are stored in first and
