@@ -35,6 +35,7 @@
 #ifndef geo_normalmaps_hpp_included
 #define geo_normalmaps_hpp_included
 
+#include "srsdef.hpp"
 #include <math/math_all.hpp>
 #include <utility/expect.hpp>
 #include <geo/csconvertor.hpp>
@@ -340,13 +341,9 @@ cv::Mat demNormals(
  * to another (typically physical) spatial reference system. Conversion is
  * performed in place and the normal map is expected to be of type CV_32FC3.
  *
- * Note that the convertor is expected to be inverse of the desired SRS 
- * transformation, i.e. it transforms from the target to the source SRS. This
- * allows for more efficient conversion. 
- *
  * @param normalMap the normal map for in-place conversion
  * @param extents extents in source SRS
- * @param convertor the inverse convertor
+ * @param conv convertor from source to target SRS
  * @param linearOptimization if true, the supplied convertor is used only for
  *  corners of the matrix, for the rest of the pixels a linear conversion is
  *  performed using bilinear interpolation. This makes sense unless the normal
@@ -354,7 +351,7 @@ cv::Mat demNormals(
  */
 
 void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
-    const CsConvertor& convertor, bool linearOptimization = true);
+    const CsConvertor &conv, bool linearOptimization = true);
 
 /**
  * Convert normal map vectors by an orthonormal basis transform.

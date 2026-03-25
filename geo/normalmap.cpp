@@ -35,39 +35,30 @@ namespace geo { namespace normalmap {
 
 namespace {
 
-void convertNormalsLinear(cv::Mat &normalMap, const math::Extents2& extents,
-    const CsConvertor& convertor) {
+void convertNormalsLinear(cv::Mat &normalMap, const CsConvertor &conv, 
+    const CsConvertor &iconv, const math::Matrix4 &raster2geo) {
+
+     LOG(debug) << "Converting normals with linear optimization. Size: "
+         << normalMap.rows << "x" << normalMap.cols;
 
     using namespace math;
 
     auto& nm(normalMap);
 
     // obtain first order linearizations in matrix corners
-    math::Size2f pxSize(
-        (extents.ur[0] - extents.ll[0]) / nm.cols,
-        (extents.ur[1] - extents.ll[1]) / nm.rows
-    );
-
-    Matrix4 raster2geo = geo::raster2geo(extents, pxSize);
-
-    //LOGONCE(debug) << "extents: " << extents;
-    //LOGONCE(debug) << "raster2geo: " << raster2geo;
-
-    auto iconv = convertor.inverse();
-
-    auto phys00 = iconv(
+    auto phys00 = conv(
         Point3(prod(raster2geo, Point4{0., 0., 0., 1.})));
-    auto phys01 = iconv(
+    auto phys01 = conv(
         Point3(prod(raster2geo, Point4{nm.cols - 1., 0., 0., 1.})));
-    auto phys10 = iconv(
+    auto phys10 = conv(
         Point3(prod(raster2geo, Point4{0., nm.rows - 1., 0., 1.})));
-    auto phys11 = iconv(
+    auto phys11 = conv(
         Point3(prod(raster2geo, Point4{nm.cols - 1., nm.rows - 1., 0., 1.})));
 
-    auto m00 = Matrix4(trans(convertor.linearize(phys00)));
-    auto m01 = Matrix4(trans(convertor.linearize(phys01)));
-    auto m10 = Matrix4(trans(convertor.linearize(phys10)));
-    auto m11 = Matrix4(trans(convertor.linearize(phys11)));
+    auto m00 = Matrix4(trans(iconv.linearize(phys00)));
+    auto m01 = Matrix4(trans(iconv.linearize(phys01)));
+    auto m10 = Matrix4(trans(iconv.linearize(phys10)));
+    auto m11 = Matrix4(trans(iconv.linearize(phys11)));
 
     // iterate through matrix cells
     for (int i = 0; i < nm.rows; i++) {
@@ -112,7 +103,7 @@ void convertNormalsLinear(cv::Mat &normalMap, const math::Extents2& extents,
 } // namespace
 
 void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
-    const CsConvertor& convertor, bool linearOptimization) {
+    const geo::CsConvertor& conv, bool linearOptimization) {
 
     //LOG(debug) << (linearOptimization
     //    ? "Converting normals with linear optimization."
@@ -123,29 +114,30 @@ void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
     // we work only 32bit floats
     ut::expect(nm.type() == CV_32FC3, "3-channel 32bit matrix expected");
 
-    // optimized conversion
-    if (linearOptimization) {
-        convertNormalsLinear(nm, extents, convertor);
-        return;
-    }
-
-    // non optimized conversion
+    // init transformations
     math::Size2f pxSize(
         (extents.ur[0] - extents.ll[0]) / nm.cols,
         (extents.ur[1] - extents.ll[1]) / nm.rows
     );
 
+    auto iconv = conv.inverse();
     math::Matrix4 raster2geo = geo::raster2geo(extents, pxSize);
-    auto iconv = convertor.inverse();
-    
+
+    // optimized conversion
+    if (linearOptimization) {
+        convertNormalsLinear(nm, conv, iconv, raster2geo);
+        return;
+    }
+
+    // non optimized conversion    
     for (int i = 0; i < nm.rows; i++)
         for (int j = 0; j < nm.cols; j++) {
 
             // local linear transformation
-            auto phys = iconv(math::Point3(prod(raster2geo,
+            auto phys = conv(math::Point3(prod(raster2geo,
                 math::Point4{(double) j, (double) i, 0., 1.})));
 
-            auto m = math::Matrix4(trans(convertor.linearize(phys)));
+            auto m = math::Matrix4(trans(iconv.linearize(phys)));
 
             LOGONCE(debug) << "m: " << m;
 
