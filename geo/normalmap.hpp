@@ -354,7 +354,8 @@ struct NoOpExtraConvertor {
 
 template <typename T = NoOpExtraConvertor>
 void convertNormalsLinear(cv::Mat &normalMap, const CsConvertor &conv,
-    const CsConvertor &iconv, const math::Matrix4 &raster2geo) {
+    const CsConvertor &iconv, const math::Matrix4 &raster2geo,
+    const T& extraConv = {}) {
 
      LOG(debug) << "Converting normals with linear optimization. Size: "
          << normalMap.rows << "x" << normalMap.cols;
@@ -378,10 +379,10 @@ void convertNormalsLinear(cv::Mat &normalMap, const CsConvertor &conv,
     auto m10 = Matrix3(subrange(trans(iconv.linearize(phys10)), 0, 3, 0, 3));
     auto m11 = Matrix3(subrange(trans(iconv.linearize(phys11)), 0, 3, 0, 3));
 
-    m00 = prod(T()(phys00), m00);
-    m01 = prod(T()(phys01), m01);
-    m10 = prod(T()(phys10), m10);
-    m11 = prod(T()(phys11), m11);
+    m00 = prod(extraConv(phys00), m00);
+    m01 = prod(extraConv(phys01), m01);
+    m10 = prod(extraConv(phys10), m10);
+    m11 = prod(extraConv(phys11), m11);
 
     // iterate through matrix cells
     for (int i = 0; i < nm.rows; i++) {
@@ -433,6 +434,11 @@ void convertNormalsLinear(cv::Mat &normalMap, const CsConvertor &conv,
  * to another (typically physical) spatial reference system. Conversion is
  * performed in place and the normal map is expected to be of type CV_32FC3.
  *
+ * The template  parameter T allows to specify an extra linear convertor, applied 
+ * to the normals after the coordinate transformation. The convertor is passed
+ * the physical coordinates of the pixel as an argument and is epxcted to return
+ * a math::Matrix3. 
+ *
  * @param normalMap the normal map for in-place conversion
  * @param extents extents in source SRS
  * @param conv convertor from source to target SRS
@@ -440,11 +446,16 @@ void convertNormalsLinear(cv::Mat &normalMap, const CsConvertor &conv,
  *  corners of the matrix, for the rest of the pixels a linear conversion is
  *  performed using bilinear interpolation. This makes sense unless the normal
  *  map spans more than haf a hemisphere.
+ * @param extraConv an extra convertor applied to the normals after the coordinate
+ *  transformation. This can be used to apply a space-dependent linear transform
+ *  to the normals, for example to transform them to a tangential plane defined 
+ *  by the local surface normal.      
  */
 
 template <typename T = detail::NoOpExtraConvertor>
 void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
-    const geo::CsConvertor& conv, bool linearOptimization = true) {
+    const geo::CsConvertor& conv, const T& extraConv = {}, 
+    bool linearOptimization = true) {
 
     namespace ut = utility;
 
@@ -468,7 +479,7 @@ void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
 
     // optimized conversion
     if (linearOptimization) {
-        detail::convertNormalsLinear<T>(nm, conv, iconv, raster2geo);
+        detail::convertNormalsLinear<T>(nm, conv, iconv, raster2geo, extraConv);
         return;
     }
 
@@ -492,7 +503,7 @@ void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
             math::Point3 normal
                 = math::normalize(prod(subrange(m, 0, 3, 0, 3), oldNormal));
 
-            math::Point3 normalws = prod(T()(phys), normal);
+            math::Point3 normalws = prod(extraConv(phys), normal);
             //LOGONCE(debug) << "normalws: " << normalws;
 
             nm.at<cv::Vec3f>(i, j) = cv::Vec3f(
