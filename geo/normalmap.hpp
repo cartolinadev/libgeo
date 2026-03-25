@@ -39,10 +39,13 @@
 #include <math/math_all.hpp>
 #include <utility/expect.hpp>
 #include <geo/csconvertor.hpp>
+#include "geo/coordinates.hpp"
 #include <utility/expect.hpp>
 #include <imgproc/rastermask.hpp>
 
 #include <opencv2/opencv.hpp>
+
+#include "utility/expect.hpp"
 
 namespace geo {
 
@@ -103,7 +106,6 @@ struct Parameters {
 template <typename value_type,
           typename Mask1 = imgproc::quadtree::RasterMask,
           typename Mask2 = imgproc::quadtree::RasterMask>
-
 cv::Mat demNormals(
     const cv::Mat& dem, const math::Size2f& pixelSize,
     const Parameters& params,
@@ -319,7 +321,16 @@ cv::Mat demNormals(
     return ret;
 }
 
-
+/**
+ * @brief Create a normal map from a DEM or grayscale image. This is a 
+ *  simplified version of the above function, which does not take masks and 
+ *  uses default parameters.
+ *
+ * @param dem input dem or grayscale image
+ * @param pixelSize size of pixel in input DEM
+ * @param params normal map generation parameters
+ * @return the resultant three channel normal map
+ */
 template <typename value_type,
           typename Mask1 = imgproc::quadtree::RasterMask,
           typename Mask2 = imgproc::quadtree::RasterMask>
@@ -331,6 +342,87 @@ cv::Mat demNormals(
         Mask1(dem.cols, dem.rows, Mask1::EMPTY),
         Mask2(dem.cols, dem.rows, Mask1::EMPTY));
 }
+
+namespace detail {
+
+struct NoOpExtraConvertor {
+
+    math::Matrix3 operator()(const math::Point3&) const {
+        return boost::numeric::ublas::identity_matrix<double>(3);
+    }
+};
+
+template <typename T = NoOpExtraConvertor>
+void convertNormalsLinear(cv::Mat &normalMap, const CsConvertor &conv,
+    const CsConvertor &iconv, const math::Matrix4 &raster2geo) {
+
+     LOG(debug) << "Converting normals with linear optimization. Size: "
+         << normalMap.rows << "x" << normalMap.cols;
+
+    using namespace math;
+
+    auto& nm(normalMap);
+
+    // obtain first order linearizations in matrix corners
+    auto phys00 = conv(
+        Point3(prod(raster2geo, Point4{0., 0., 0., 1.})));
+    auto phys01 = conv(
+        Point3(prod(raster2geo, Point4{nm.cols - 1., 0., 0., 1.})));
+    auto phys10 = conv(
+        Point3(prod(raster2geo, Point4{0., nm.rows - 1., 0., 1.})));
+    auto phys11 = conv(
+        Point3(prod(raster2geo, Point4{nm.cols - 1., nm.rows - 1., 0., 1.})));
+
+    auto m00 = Matrix3(subrange(trans(iconv.linearize(phys00)), 0, 3, 0, 3));
+    auto m01 = Matrix3(subrange(trans(iconv.linearize(phys01)), 0, 3, 0, 3));
+    auto m10 = Matrix3(subrange(trans(iconv.linearize(phys10)), 0, 3, 0, 3));
+    auto m11 = Matrix3(subrange(trans(iconv.linearize(phys11)), 0, 3, 0, 3));
+
+    m00 = prod(T()(phys00), m00);
+    m01 = prod(T()(phys01), m01);
+    m10 = prod(T()(phys10), m10);
+    m11 = prod(T()(phys11), m11);
+
+    // iterate through matrix cells
+    for (int i = 0; i < nm.rows; i++) {
+
+        // start and end of row trafo
+        float posy = (float) i / (nm.rows - 1);
+
+        Matrix3 mi0 = (1 - posy) * m00 + posy * m10;
+        Matrix3 mi1 = (1 - posy) * m01 + posy * m11;
+
+        //LOGONCE(debug) << "mi0: " << mi0;
+        //LOGONCE(debug) << "mi1: " << mi1;
+
+        for (int j = 0; j < nm.cols; j++) {
+
+            // local trafo
+            float posx = (float) j / (nm.cols - 1);
+
+            Matrix3 m = (1 - posx) * mi0 + posx * mi1;
+
+            //LOGONCE(debug) << "local matrix:" << m;
+
+            // transform in place
+            cv::Vec3f on = nm.at<cv::Vec3f>(i, j);
+
+            Point3 oldNormal(on(0), on(1), on(2));
+            //LOGONCE(debug) << "old normal: " << oldNormal;
+
+            Point3 normal = math::normalize(prod(m, oldNormal));
+            //LOGONCE(debug) << "normal: " << normal;
+
+            nm.at<cv::Vec3f>(i, j) = cv::Vec3f(
+                normal[0], normal[1], normal[2]);
+
+        }
+    }
+
+    // done
+}
+
+} // namespace detail
 
 
 /**
@@ -350,8 +442,67 @@ cv::Mat demNormals(
  *  map spans more than haf a hemisphere.
  */
 
+template <typename T = detail::NoOpExtraConvertor>
 void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
-    const CsConvertor &conv, bool linearOptimization = true);
+    const geo::CsConvertor& conv, bool linearOptimization = true) {
+
+    namespace ut = utility;
+
+    //LOG(debug) << (linearOptimization
+    //    ? "Converting normals with linear optimization."
+    //    : "Converting normals without optimization.");
+
+    auto& nm(normalMap);
+
+    // we work only 32bit floats
+    ut::expect(nm.type() == CV_32FC3, "3-channel 32bit matrix expected");
+
+    // init transformations
+    math::Size2f pxSize(
+        (extents.ur[0] - extents.ll[0]) / nm.cols,
+        (extents.ur[1] - extents.ll[1]) / nm.rows
+    );
+
+    auto iconv = conv.inverse();
+    math::Matrix4 raster2geo = geo::raster2geo(extents, pxSize);
+
+    // optimized conversion
+    if (linearOptimization) {
+        detail::convertNormalsLinear<T>(nm, conv, iconv, raster2geo);
+        return;
+    }
+
+    // non optimized conversion    
+    for (int i = 0; i < nm.rows; i++)
+        for (int j = 0; j < nm.cols; j++) {
+
+            // local linear transformation
+            auto phys = conv(math::Point3(prod(raster2geo,
+                math::Point4{(double) j, (double) i, 0., 1.})));
+
+            auto m = math::Matrix4(trans(iconv.linearize(phys)));
+
+            LOGONCE(debug) << "m: " << m;
+
+            // transform in place
+            cv::Vec3f on = nm.at<cv::Vec3f>(i, j);
+
+            math::Point3 oldNormal(on(0), on(1), on(2));
+
+            math::Point3 normal
+                = math::normalize(prod(subrange(m, 0, 3, 0, 3), oldNormal));
+
+            math::Point3 normalws = prod(T()(phys), normal);
+            //LOGONCE(debug) << "normalws: " << normalws;
+
+            nm.at<cv::Vec3f>(i, j) = cv::Vec3f(
+                normalws[0], normalws[1], normalws[2]);
+
+    }
+
+    // done
+}
+
 
 /**
  * Convert normal map vectors by an orthonormal basis transform.
