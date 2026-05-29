@@ -43,6 +43,9 @@
 #include <utility/expect.hpp>
 #include <imgproc/rastermask.hpp>
 
+#include <boost/optional.hpp>
+#include <cmath>
+
 #include <opencv2/opencv.hpp>
 
 #include "utility/expect.hpp"
@@ -83,6 +86,17 @@ struct Parameters {
     bool viewspaceRf = true;
     bool invertRelief = false;
     float zFactor = 1;
+
+    /**
+     * Optional source nodata (masked-out) value. When set, any sample of
+     * the moving window equal to this value is treated as missing data and
+     * reconstructed from the window's valid samples by inverse-square-
+     * distance weighting; only a window with no valid sample at all yields
+     * an upward (flat) normal. This suppresses the artifacts that nodata
+     * pixels would otherwise produce where the source raster's coverage is
+     * incomplete.
+     */
+    boost::optional<double> nodata;
 };
 
 
@@ -118,26 +132,27 @@ cv::Mat demNormals(
     class Window {
 
     public:
-        // initialize window centered at 1,1 //
+        /** initialise the window at the first interior row */
         Window(const cv::Mat &mat, const math::Size2f& pixelSize,
-            const float zFactor)
-            : mat(mat), pixelSize(pixelSize), zFactor(zFactor) {
+            const float zFactor, const boost::optional<double> &nodata)
+            : mat(mat), pixelSize(pixelSize), zFactor(zFactor)
+            , nodata(nodata) {
 
             row(1);
         }
 
-        // move window to the beginning of the row
+        /** move the window to the start of row i */
         void row(int i) {
 
-            row0 = mat.ptr<value_type>(i - 1);
-            row1 = mat.ptr<value_type>(i);
-            row2 = mat.ptr<value_type>(i + 1);
+            rows[0] = mat.ptr<value_type>(i - 1);
+            rows[1] = mat.ptr<value_type>(i);
+            rows[2] = mat.ptr<value_type>(i + 1);
         }
 
-        // move window 1px to the right
+        /** advance the window one pixel to the right */
         void incx() {
 
-            row0++; row1++; row2++;
+            ++rows[0]; ++rows[1]; ++rows[2];
         }
 
         /**
@@ -151,19 +166,24 @@ cv::Mat demNormals(
          */
         double v(uint index) const {
 
-            switch(index) {
+            const double value = raw(index);
 
-                case 1: return row0[0];
-                case 2: return row0[1];
-                case 3: return row0[2];
-                case 4: return row1[0];
-                case 5: return row1[1];
-                case 6: return row1[2];
-                case 7: return row2[0];
-                case 8: return row2[1];
-                case 9: return row2[2];
-                default: return 0; // never reached
+            // common path: a valid sample. A missing one is rebuilt by the
+            // reconstruct() escape hatch below.
+            return isNodata(value) ? reconstruct(index) : value;
+        }
+
+        /**
+         * Does the window hold at least one valid sample to build a normal
+         * from? If not, the caller emits a flat normal.
+         */
+        bool hasData() const {
+
+            for (uint index = 1; index <= 9; ++index) {
+                if (!isNodata(raw(index))) { return true; }
             }
+
+            return false;
         }
 
         /* these functions work in image coords (z points downwards).
@@ -234,10 +254,60 @@ cv::Mat demNormals(
         }
 
     private:
+
+        /** raw window sample at index 1-9, before missing-data handling */
+        double raw(uint index) const {
+
+            return rows[windowRow(index) + 1][windowCol(index) + 1];
+        }
+
+        /** is the sample the masked-out (nodata) sentinel? */
+        bool isNodata(double value) const {
+
+            return nodata && (value == *nodata);
+        }
+
+        /**
+         * Missing-data escape hatch, reached only where the source raster
+         * has missing (nodata) samples. Rebuilds a missing sample as an
+         * inverse-square-distance weighted average of the window's valid
+         * samples: an orthogonal neighbour weighs 1, a diagonal one 0.5, and
+         * so on. This keeps a missing sample from injecting a spurious slope
+         * into the gradient.
+         */
+        double reconstruct(uint missing) const {
+
+            double weightedSum = 0.0, weightSum = 0.0;
+
+            for (uint index = 1; index <= 9; ++index) {
+
+                const double value = raw(index);
+
+                if (index == missing || isNodata(value)) { continue; }
+
+                const int deltaCol = windowCol(index) - windowCol(missing);
+                const int deltaRow = windowRow(index) - windowRow(missing);
+                const double weight =
+                    1.0 / (deltaCol * deltaCol + deltaRow * deltaRow);
+
+                weightedSum += weight * value;
+                weightSum += weight;
+            }
+
+            // weightSum is positive whenever the window holds any valid
+            // sample, which hasData() has already ensured for the caller
+            return weightSum > 0.0 ? weightedSum / weightSum : raw(missing);
+        }
+
+        /** column / row of window sample 1-9 relative to the centre (-1..1) */
+        static int windowCol(uint index) { return int((index - 1) % 3) - 1; }
+        static int windowRow(uint index) { return int((index - 1) / 3) - 1; }
+
         const cv::Mat &mat;
-        const value_type *row0, *row1, *row2;
+        const value_type *rows[3];
         math::Size2f pixelSize;
         float zFactor;
+        boost::optional<double> nodata;
     };
 
 
@@ -257,7 +327,7 @@ cv::Mat demNormals(
     cv::Mat ret = cv::Mat::zeros(height - 2, width - 2,  CV_32FC3);
 
     // transformer
-    Window window(dem, pixelSize, params.zFactor);
+    Window window(dem, pixelSize, params.zFactor, params.nodata);
 
     for (int j = 0; j < height - 2; j++) {
 
@@ -268,9 +338,10 @@ cv::Mat demNormals(
 
             math::Point3 normal;
 
-            if (flatMask.get(i + 1, j + 1)) {
+            if (flatMask.get(i + 1, j + 1) || !window.hasData()) {
 
-                // flat area
+                // flat area, or a window with no valid data at all: emit an
+                // upward (flat) normal
                 normal = {0, 0, -1};
 
             } else {
