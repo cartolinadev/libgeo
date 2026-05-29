@@ -365,14 +365,20 @@ void convertNormalsLinear(cv::Mat &normalMap, const CsConvertor &conv,
     auto& nm(normalMap);
 
     // obtain first order linearizations in matrix corners
+    // raster2geo is affine, so the product's homogeneous coordinate stays 1;
+    // we drop it with subrange rather than euclidian (no division needed).
     auto phys00 = conv(
-        Point3(prod(raster2geo, Point4{0., 0., 0., 1.})));
+        Point3(subrange(prod(raster2geo, Point4{0., 0., 0., 1.}), 0, 3)));
     auto phys01 = conv(
-        Point3(prod(raster2geo, Point4{nm.cols - 1., 0., 0., 1.})));
+        Point3(subrange(prod(raster2geo, Point4{nm.cols - 1., 0., 0., 1.})
+                        , 0, 3)));
     auto phys10 = conv(
-        Point3(prod(raster2geo, Point4{0., nm.rows - 1., 0., 1.})));
+        Point3(subrange(prod(raster2geo, Point4{0., nm.rows - 1., 0., 1.})
+                        , 0, 3)));
     auto phys11 = conv(
-        Point3(prod(raster2geo, Point4{nm.cols - 1., nm.rows - 1., 0., 1.})));
+        Point3(subrange(prod(raster2geo
+                             , Point4{nm.cols - 1., nm.rows - 1., 0., 1.})
+                        , 0, 3)));
 
     auto m00 = Matrix3(subrange(trans(iconv.linearize(phys00)), 0, 3, 0, 3));
     auto m01 = Matrix3(subrange(trans(iconv.linearize(phys01)), 0, 3, 0, 3));
@@ -487,9 +493,9 @@ void convertNormals(cv::Mat &normalMap, const math::Extents2& extents,
     for (int i = 0; i < nm.rows; i++)
         for (int j = 0; j < nm.cols; j++) {
 
-            // local linear transformation
-            auto phys = conv(math::Point3(prod(raster2geo,
-                math::Point4{(double) j, (double) i, 0., 1.})));
+            // local linear transformation (affine: drop homogeneous coord)
+            auto phys = conv(math::Point3(subrange(prod(raster2geo,
+                math::Point4{(double) j, (double) i, 0., 1.}), 0, 3)));
 
             auto m = math::Matrix4(trans(iconv.linearize(phys)));
 
