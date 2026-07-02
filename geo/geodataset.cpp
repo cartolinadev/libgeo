@@ -64,24 +64,56 @@
 #include "detail/ovrdataset.hpp"
 #include "detail/options.hpp"
 
+namespace {
+
+/** This is used to tone down the omnipresent (and probably benign)
+    GDAL transform errors which popup when warping high-latitude datasets. */
+bool isBenignTransformError(CPLErr severity,
+                            CPLErrorNum errorNumber,
+                            std::string_view message)
+{
+    if (severity != CE_Failure || errorNumber != CPLE_AppDefined)
+        return false;
+
+    constexpr std::string_view patterns[] = {
+        "Invalid latitude",
+        "Invalid coordinate",
+        "Reprojection failed, err = 2049"
+    };
+
+    return std::any_of(std::begin(patterns), std::end(patterns),
+        [message](std::string_view pattern) {
+            return message.find(pattern) != std::string_view::npos;
+        });
+
+}
+
+} // namespace
+
 extern "C" {
+    
 void GDALErrorHandler( CPLErr eErrClass, int err_no, const char *msg)
 {
+    std::string_view text{msg};
+
     switch ( eErrClass ) {
     case CE_Debug:
-        LOG( debug ) << "gdal error " << err_no << ": " << msg;
+        LOG( debug ) << "gdal error " << err_no << ": " << text;
         break;
 
     case CE_Warning:
-        LOG( warn2 ) << "gdal error " << err_no << ": " << msg;
+        LOG( warn2 ) << "gdal error " << err_no << ": " << text;
         break;
 
-    case CE_Failure:
-        LOG( err2 ) << "gdal error " << err_no << ": " << msg;
+    case CE_Failure: 
+        if (isBenignTransformError(CE_Failure, err_no, text))
+            LOG( err1 ) << "gdal error " << err_no << ": " << text;
+        else
+            LOG( err2 ) << "gdal error " << err_no << ": " << text;
         break;
 
     case CE_Fatal:
-        LOG( fatal ) << "gdal error " << err_no << ": " << msg;
+        LOG( fatal ) << "gdal error " << err_no << ": " << text;
         break;
 
     default:
