@@ -1572,6 +1572,20 @@ GeoDataset::warpInto(GeoDataset &dst
     // calculate sourceExtra parameter from datasets (if needed)
     sourceExtra(*this, ovrDs, dst, wo, warpOptions);
 
+#if GDAL_VERSION_NUM >= 3020000 && GDAL_VERSION_NUM < 3130000
+    // GDAL sizes the smoothing kernel from the dst/src window ratio; when the
+    // source window wraps around (dst extents touch the dateline of a global
+    // dataset) or legitimately spans all longitudes (polar areas), that ratio
+    // vastly overestimates the x-axis downsampling and the kernel smears the
+    // output horizontally. Grid sampling derives the scale from local
+    // per-pixel derivatives instead, ignoring the discontinuity. GDAL 3.13+
+    // grid-samples by default and no longer accepts the sentinel (any XSCALE
+    // is parsed as a number there), hence the upper version bound.
+    if (!::CSLFetchNameValue(wo, "XSCALE")) {
+        wo("XSCALE", "FROM_GRID_SAMPLING");
+    }
+#endif
+
     // update options and grab options since it is destroyed by
     // GDALDestroyWarpOptions
     if (!options.noInit) {
