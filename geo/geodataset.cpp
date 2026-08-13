@@ -30,6 +30,7 @@
 #include <cassert>
 #include <sstream>
 #include <numeric>
+#include <algorithm>
 #include <limits>
 
 #include <boost/utility/in_place_factory.hpp>
@@ -42,6 +43,7 @@
 
 #include <gdalwarper.h>
 #include <gdal_utils.h>
+#include <vrtdataset.h>
 
 #include "utility/openmp.hpp"
 #include "utility/expect.hpp"
@@ -1045,6 +1047,149 @@ void createTransformer(GDALWarpOptions *wo)
 }
 
 
+/** Resampling kernel half-width in pixels at unit scale. The values
+ *  follow the kernel definitions (GDAL's anGWKFilterRadius; the
+ *  GWKGetFilterRadius accessor is not exported from the library);
+ *  footprint algorithms (average, min/max, ...) read one pixel around
+ *  the scaled footprint.
+ */
+int filterRadius(::GDALResampleAlg alg)
+{
+    switch (alg) {
+    case ::GRA_Bilinear: return 1;
+    case ::GRA_Cubic: return 2;
+    case ::GRA_CubicSpline: return 2;
+    case ::GRA_Lanczos: return 3;
+    default: return 1;
+    }
+}
+
+/** Returns a view of the warp source padded on both sides with columns
+ *  wrapped from the opposite edge, or nullptr when no padding is
+ *  needed. GDAL resampling kernels do not wrap in x: on a raster
+ *  covering one x-period of a periodic SRS, pixels near the seam
+ *  interpolate from one side only and the two destination tiles
+ *  sharing the seam disagree at their common border. The padding
+ *  supplies the kernel data across the seam.
+ *
+ *  Engages only when the source is upright and covers exactly one
+ *  x-period, and the warp footprint reaches the seam: a destination
+ *  corner transforms close to an x edge, wraps around (corners not
+ *  right-rotating) or fails to transform. The pad width is the kernel
+ *  half-width scaled by the downsampling ratio (GDAL widens its
+ *  kernels by the same factor) plus one pixel for rounding.
+ *
+ *  Updates the warp options to read from the padded view; the
+ *  returned dataset must outlive the warp.
+ */
+std::unique_ptr<GDALDataset>
+wrapPadSource(GDALWarpOptions *wo, const GeoDataset::WarpResultInfo &wri)
+{
+    auto src(static_cast<GDALDataset*>(wo->hSrcDS));
+    const auto ds(GeoDataset::descriptor(src));
+
+    // a raster covering exactly one x-period
+    if (!xPeriodOverlap(ds, 0)) { return {}; }
+
+    const int width(ds.size.width);
+    const int height(ds.size.height);
+
+    const auto radius(filterRadius(wo->eResampleAlg));
+    const auto pad
+        (std::min(int(std::ceil(radius / std::min(wri.scale, 1.0))) + 1
+                  , width));
+
+    // pad only when the warp footprint reaches the seam: a corner
+    // lands within the pad of an x edge, the footprint wraps around
+    // (corners no longer right-rotating) or a corner fails to transform
+    const math::Size2 dstSize(::GDALGetRasterXSize(wo->hDstDS)
+                              , ::GDALGetRasterYSize(wo->hDstDS));
+
+    Corners<4> corners;
+    corners.add(0, 0.0, 0.0);
+    corners.add(1, dstSize.width, 0.0);
+    corners.add(2, dstSize.width, dstSize.height);
+    corners.add(3, 0.0, dstSize.height);
+
+    wo->pfnTransformer(wo->pTransformerArg, true, 4
+                       , corners.x.data(), corners.y.data()
+                       , corners.z.data(), corners.success.data());
+
+    const auto points(corners.asPoints());
+    const auto atEdge([&](const math::Point2 &point)
+    {
+        return (point(0) < pad) || (point(0) > (width - pad));
+    });
+
+    if (corners.allValid() && rightRotating(points, false)
+        && !std::any_of(points.begin(), points.end(), atEdge))
+    {
+        return {};
+    }
+
+    auto gt(ds.geoTransform);
+    gt[0] -= pad * gt[1];
+
+    std::unique_ptr<GDALDataset> vrt(new ::VRTDataset(width + 2 * pad
+                                                      , height));
+    vrt->SetProjection(src->GetProjectionRef());
+    vrt->SetGeoTransform(gt.data());
+
+    // the raster itself plus a strip of pad columns wrapped from the
+    // opposite edge on either side
+    const auto wrapData([&](VRTSourcedRasterBand *to, ::GDALRasterBand *from
+                            , int srcOff, int dstOff, int columns)
+    {
+        to->AddSimpleSource(from, srcOff, 0, columns, height
+                            , dstOff, 0, columns, height);
+    });
+
+    const auto wrapMask([&](VRTSourcedRasterBand *to, ::GDALRasterBand *from
+                            , int srcOff, int dstOff, int columns)
+    {
+        to->AddMaskBandSource(from, srcOff, 0, columns, height
+                              , dstOff, 0, columns, height);
+    });
+
+    const auto wrap([&](VRTSourcedRasterBand *to, ::GDALRasterBand *from
+                        , const auto &addSource)
+    {
+        addSource(to, from, 0, pad, width);
+        addSource(to, from, width - pad, 0, pad);
+        addSource(to, from, 0, width + pad, pad);
+    });
+
+    for (int band(1); band <= src->GetRasterCount(); ++band) {
+
+        auto from(src->GetRasterBand(band));
+        vrt->AddBand(from->GetRasterDataType(), nullptr);
+        auto to(static_cast<VRTSourcedRasterBand*>
+                (vrt->GetRasterBand(band)));
+        to->SetColorInterpretation(from->GetColorInterpretation());
+
+        int hasNodata(0);
+        const auto nodata(from->GetNoDataValue(&hasNodata));
+        if (hasNodata) { to->SetNoDataValue(nodata); }
+
+        wrap(to, from, wrapData);
+    }
+
+    auto first(src->GetRasterBand(1));
+    if (first->GetMaskFlags() & GMF_PER_DATASET) {
+        vrt->CreateMaskBand(GMF_PER_DATASET);
+        wrap(static_cast<VRTSourcedRasterBand*>
+             (vrt->GetRasterBand(1)->GetMaskBand()), first, wrapMask);
+    }
+
+    LOG(info1)("Wrap-padding warp source by %d columns per side.", pad);
+
+    // read from the padded view
+    wo->hSrcDS = vrt.get();
+    createTransformer(wo);
+
+    return vrt;
+}
+
 void obtainScale(GDALWarpOptions *wo, GeoDataset::WarpResultInfo & wri)
 {
     try {
@@ -1602,6 +1747,10 @@ GeoDataset::warpInto(GeoDataset &dst
        int ovr( wri.overview ? *wri.overview : -1 );
        overviewByMemoryReqs(ovrDs, dset_.get(), warpOptions, ovr, wri);
     }
+
+    // wrap-pad an x-periodic source so the resampling kernel sees data
+    // across the antimeridian seam; holds the padded view over the warp
+    const auto wrapDs(wrapPadSource(warpOptions, wri));
 
     // initialize and execute the warp operation.
     GDALWarpOperation oOperation;
@@ -3541,6 +3690,30 @@ DecimationFactors GeoDataset::binaryDecimation(const math::Size2 &minSize)
     }
 
     return factors;
+}
+
+boost::optional<int> xPeriodOverlap(const GeoDataset::Descriptor &ds
+                                    , int maxOverlap)
+{
+    if (!ds.geoTransform.isUpright()) { return boost::none; }
+
+    const auto periodic(isPeriodic(ds.srs));
+    if (!periodic || (periodic->type != Periodicity::Type::x)) {
+        return boost::none;
+    }
+
+    const auto periodColumns((periodic->max - periodic->min)
+                             / ds.resolution(0));
+    const auto overlap(std::round(ds.size.width - periodColumns));
+    if ((overlap < 0.0) || (overlap > maxOverlap)) { return boost::none; }
+
+    // edge adjacency after cropping the overlap, in pixel widths
+    const auto epsilon(std::min(0.1, 1e-3 * periodColumns));
+    if (std::abs(ds.size.width - overlap - periodColumns) > epsilon) {
+        return boost::none;
+    }
+
+    return int(overlap);
 }
 
 void GeoDataset::buildOverviews(Resampling resampling

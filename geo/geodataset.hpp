@@ -1129,6 +1129,25 @@ private:
     bool fresh_;
 };
 
+/** Number of columns by which an upright raster in an x-periodic SRS
+ *  overlaps one full x-period; 0 when the raster covers exactly one
+ *  period. Engaged when cropping a whole-column overlap of at most
+ *  maxOverlap columns leaves the left edge of the first column and
+ *  the right edge of the last column adjacent modulo the period.
+ *
+ *  Adjacency holds to within a tenth of a pixel width, since global
+ *  rasters carry rounded resolutions and miss it by such fractions,
+ *  or a thousandth of the period, whichever is tighter. The second
+ *  term rules the degenerate cases: on a raster of a few columns a
+ *  fraction of a pixel spans a fraction of the globe.
+ *
+ * @param ds descriptor of the examined raster
+ * @param maxOverlap largest accepted overlap, in columns
+ * @return the overlap in columns, boost::none when not periodic
+ */
+boost::optional<int> xPeriodOverlap(const GeoDataset::Descriptor &ds
+                                    , int maxOverlap);
+
 // inline method implementation
 
 // enum i/o mapping
