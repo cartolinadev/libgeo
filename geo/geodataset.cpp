@@ -973,6 +973,12 @@ void sourceExtra(const GeoDataset::Descriptor &src
                  , detail::OptionsWrapper &wo
                  , const GDALWarpOptions *warpOptions)
 {
+    // wrapPadSource supplies seam pixels for an exact x-periodic source.
+    // Perimeter sampling already sees both x ends, and transform failures
+    // make GDAL retry with a grid. SOURCE_EXTRA would make the wrapped
+    // source window appear too large and force a coarse overview.
+    if (xPeriodOverlap(src, 0)) { return; }
+
     auto size(dst.size);
 
     Corners<4> corners;
@@ -1285,8 +1291,11 @@ std::unique_ptr<GDALDataset> useOverview(
            (detail::createOverviewDataset(src, ovr));
     }
 
+    if (!ovrDs && (ovr >= 0))
+        LOGTHROW(err1, WarpError) << "Cannot use overview #" << ovr << ".";
+
     if (!ovrDs) {
-        // failed -> go on with original dataset
+        // use the original dataset
         return ovrDs;
     }
 
@@ -1348,7 +1357,8 @@ overviewByScale(GDALDataset *src,
 void overviewByMemoryReqs(std::unique_ptr<GDALDataset> &ovrDs
                           , GDALDataset *src
                           , GDALWarpOptions * wo, int & ovr
-                          , GeoDataset::WarpResultInfo & wri)
+                          , GeoDataset::WarpResultInfo & wri
+                          , std::unique_ptr<GDALDataset> *wrapDs = nullptr)
 {
 
   if (wo->dfWarpMemoryLimit == 0.0) {
@@ -1366,8 +1376,19 @@ void overviewByMemoryReqs(std::unique_ptr<GDALDataset> &ovrDs
 
   for ( ;ovr < count; ovr++) {
 
+     if (wrapDs && *wrapDs) {
+
+         GDALDestroyGenImgProjTransformer(wo->pTransformerArg);
+         wo->pTransformerArg = nullptr;
+         wo->hSrcDS = ovrDs ? ovrDs.get() : src;
+         wrapDs->reset();
+
+     }
+
      // use overview
      ovrDs = useOverview(src, wo, ovr, wri);
+
+     if (wrapDs) *wrapDs = wrapPadSource(wo, wri);
 
      // obtain measure
      measure = detail::WarpMemoryMeter(wo).measure();
@@ -1742,15 +1763,21 @@ GeoDataset::warpInto(GeoDataset &dst
     // choose resampling
     warpOptions->eResampleAlg = chooseResampling(alg, wri);
 
+    std::unique_ptr<GDALDataset> wrapDs;
     if (options.safeChunks) {
+
        // re-check memory requirements, resampling may change everything
        int ovr( wri.overview ? *wri.overview : -1 );
-       overviewByMemoryReqs(ovrDs, dset_.get(), warpOptions, ovr, wri);
+       overviewByMemoryReqs(ovrDs, dset_.get(), warpOptions, ovr, wri
+                            , &wrapDs);
+
+       if (ovr < 0) wri.overview = boost::none;
+       if (ovr >= 0) wri.overview = ovr;
     }
 
-    // wrap-pad an x-periodic source so the resampling kernel sees data
-    // across the antimeridian seam; holds the padded view over the warp
-    const auto wrapDs(wrapPadSource(warpOptions, wri));
+    // hold the padded view over the warp
+    if (!wrapDs)
+        wrapDs = wrapPadSource(warpOptions, wri);
 
     // initialize and execute the warp operation.
     GDALWarpOperation oOperation;
