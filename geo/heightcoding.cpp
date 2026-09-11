@@ -99,7 +99,7 @@ Metadata heightCode(::GDALDataset &vectorDs
     }
 
     // convert 3D polygons to surfaces; planar output keeps polygons as rings
-    if (!config.tileExtents) featureLayers.convert3DPolygons();
+    if (!config.planar) featureLayers.convert3DPolygons();
 
     // transform to output srs
     if (config.outputSrs) {
@@ -130,8 +130,8 @@ Metadata heightCode(::GDALDataset &vectorDs
         if (const auto *c = boost::get<vectorformat::GeodataConfig>
             (&config.formatConfig))
         {
-            if (config.tileExtents) {
-                featureLayers.dumpVTSGeodata(os, *config.tileExtents
+            if (config.planar) {
+                featureLayers.dumpVTSGeodata(os, config.planarExtents
                                              , c->resolution);
             } else {
                 featureLayers.dumpVTSGeodata(os, c->resolution);

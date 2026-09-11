@@ -360,14 +360,15 @@ public :
     /**
      * @brief serialize into planar geodata format (version 2).
      * @param os where to send output
-     * @param tileExtents tile extents in the layers' SRS
+     * @param extents quantization extents in the layers' SRS, e.g. the
+     *     tile extents; coordinates are written as they are when unset
      * @param resolution number of quantization steps across the extents
      *
-     * Coordinates are two-dimensional, quantized against tileExtents, and
-     * groups carry no bounding box. Polygons are written as exterior and
-     * interior rings.
+     * Coordinates are two-dimensional and carry no bounding box. Polygons
+     * are written as exterior and interior rings.
      */
-    void dumpVTSGeodata(std::ostream & os, const math::Extents2 &tileExtents
+    void dumpVTSGeodata(std::ostream & os
+                        , const boost::optional<math::Extents2> &extents
                         , const unsigned resolution = 4096);
 
     /** Calls f(v) for every vertex in all layers
@@ -381,8 +382,8 @@ private :
     /** Shared body of both dumpVTSGeodata overloads; planar selects the
      *  version 2 form.
      */
-    void dumpGeodata(std::ostream &os
-                     , const boost::optional<math::Extents2> &planar
+    void dumpGeodata(std::ostream &os, bool planar
+                     , const boost::optional<math::Extents2> &extents
                      , unsigned resolution);
 
     template <class TPoint3>

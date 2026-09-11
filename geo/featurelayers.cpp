@@ -764,17 +764,19 @@ void FeatureLayers::dumpLegacyGeodata(std::ostream & os
 
 namespace {
 
-/** Quantizes coordinates into resolution steps across an extent, writing
- *  either three (version 1) or two (planar, version 2) components.
+/** Writes coordinates with three (version 1) or two (planar, version 2)
+ *  components, quantized into resolution steps across an extent or, for
+ *  planar output without extents, as they are.
  */
 struct ToLocal {
 
     math::Point3 origin, scale;
     int dimensions;
+    bool quantize;
 
     ToLocal(const boost::optional<math::Extents3> &extents
             , unsigned resolution)
-        : origin(0, 0, 0), scale(1, 1, 1), dimensions(3)
+        : origin(0, 0, 0), scale(1, 1, 1), dimensions(3), quantize(true)
     {
         if (!extents) return;
         origin = extents->ll;
@@ -783,12 +785,16 @@ struct ToLocal {
 
     ToLocal(const math::Extents2 &extents, unsigned resolution)
         : origin(extents.ll(0), extents.ll(1), 0), scale(0, 0, 0)
-        , dimensions(2)
+        , dimensions(2), quantize(true)
     {
         setScale(math::Point3(extents.ur(0) - extents.ll(0)
                               , extents.ur(1) - extents.ll(1), 0)
                  , resolution);
     }
+
+    ToLocal() : origin(0, 0, 0), scale(1, 1, 1), dimensions(2)
+              , quantize(false)
+    {}
 
     void setScale(const math::Point3 &range, unsigned resolution) {
 
@@ -800,9 +806,18 @@ struct ToLocal {
     Json::Value operator()(const math::Point3 &p) const {
 
         Json::Value value(Json::arrayValue);
-        for (int axis = 0; axis < dimensions; ++axis)
+
+        for (int axis = 0; axis < dimensions; ++axis) {
+
+            if (!quantize) {
+                value.append(p[axis]);
+                continue;
+            }
+
             value.append(static_cast<int>
                          (round((p[axis] - origin[axis]) * scale[axis])));
+        }
+
         return value;
     }
 };
@@ -939,18 +954,20 @@ void dumpSurfaces(Json::Value &jlayer, const FeatureLayers::Layer &layer
 void FeatureLayers::dumpVTSGeodata(std::ostream & os
                                    , const unsigned resolution)
 {
-    dumpGeodata(os, boost::none, resolution);
+    dumpGeodata(os, false, boost::none, resolution);
 }
 
 void FeatureLayers::dumpVTSGeodata(std::ostream & os
-                                   , const math::Extents2 &tileExtents
+                                   , const boost::optional<math::Extents2>
+                                   &extents
                                    , const unsigned resolution)
 {
-    dumpGeodata(os, tileExtents, resolution);
+    dumpGeodata(os, true, extents, resolution);
 }
 
-void FeatureLayers::dumpGeodata(std::ostream &os
-                                , const boost::optional<math::Extents2> &planar
+void FeatureLayers::dumpGeodata(std::ostream &os, bool planar
+                                , const boost::optional<math::Extents2>
+                                &extents
                                 , unsigned resolution)
 {
     Json::Value root(Json::objectValue);
@@ -962,18 +979,26 @@ void FeatureLayers::dumpGeodata(std::ostream &os
 
         auto &jlayer = jlayers.append(Json::objectValue);
         jlayer["id"] = layer.name;
-        jlayer["resolution"] = resolution;
 
-        // planar groups are quantized against the tile, version 1 groups
-        // against their own bounding box
+        // a planar group is quantized against the given extents, or keeps
+        // its coordinates without them; a version 1 group is quantized
+        // against its own bounding box
         if (planar) {
 
-            const ToLocal tolocal(*planar, resolution);
+            ToLocal tolocal;
+
+            if (extents) {
+                jlayer["resolution"] = resolution;
+                tolocal = ToLocal(*extents, resolution);
+            }
+
             dumpPoints(jlayer, layer, tolocal);
             dumpLines(jlayer, layer, tolocal);
             dumpPolygons(jlayer, layer, tolocal);
 
         } else {
+
+            jlayer["resolution"] = resolution;
 
             if (layer.featuresBB) {
 
@@ -992,6 +1017,13 @@ void FeatureLayers::dumpGeodata(std::ostream &os
     Json::StreamWriterBuilder wb;
     wb["indentation"] = "";
     wb["commentStyle"] = "None";
+
+    // unquantized coordinates are the only doubles in the document
+    if (planar && !extents) {
+        wb["precision"] = 7;
+        wb["precisionType"] = "decimal";
+    }
+
     std::unique_ptr<Json::StreamWriter> writer(wb.newStreamWriter());
     writer->write(root, &os);
 }

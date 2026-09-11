@@ -115,11 +115,16 @@ struct Config {
      */
     boost::optional<LayerNames> clipLayers;
 
-    /** Tile extents (in workingSrs). When set, output is planar: two
-     *  coordinates per vertex quantized against these extents, no bounding
-     *  box, polygons kept as rings.
+    /** Planar output: two coordinates per vertex, no bounding box,
+     *  polygons kept as rings.
      */
-    boost::optional<math::Extents2> tileExtents;
+    bool planar;
+
+    /** Quantization extents of planar output (in output SRS), e.g. the
+     *  tile extents; features may lie outside. Coordinates are written as
+     *  they are when unset.
+     */
+    boost::optional<math::Extents2> planarExtents;
 
     /** Output format.
      */
@@ -142,7 +147,8 @@ struct Config {
     std::function<void(FeatureLayers&)> postprocess;
 
     Config()
-        : outputVerticalAdjust(false), format(VectorFormat::geodataJson)
+        : outputVerticalAdjust(false), planar(false)
+        , format(VectorFormat::geodataJson)
         , mode(Mode::auto_), schema(Schema::maptiler)
     {}
 };
