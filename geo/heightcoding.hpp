@@ -115,6 +115,12 @@ struct Config {
      */
     boost::optional<LayerNames> clipLayers;
 
+    /** Tile extents (in workingSrs). When set, output is planar: two
+     *  coordinates per vertex quantized against these extents, no bounding
+     *  box, polygons kept as rings.
+     */
+    boost::optional<math::Extents2> tileExtents;
+
     /** Output format.
      */
     VectorFormat format;

@@ -348,13 +348,27 @@ public :
             , const std::string & linestringStyle = "linestring-default");
 
     /**
-     * @brief serialize into VTS free layer geodata format.
+     * @brief serialize into VTS free layer geodata format (version 1).
      * @param os where to send output
      * @param resolution output resolution, as defined in VTS geodata spec
      *
-     * See VTS docs for format spec.
+     * Every group carries its 3D bounding box and coordinates quantized
+     * against it. See VTS docs for format spec.
      */
     void dumpVTSGeodata(std::ostream & os, const unsigned resolution = 4096);
+
+    /**
+     * @brief serialize into planar geodata format (version 2).
+     * @param os where to send output
+     * @param tileExtents tile extents in the layers' SRS
+     * @param resolution number of quantization steps across the extents
+     *
+     * Coordinates are two-dimensional, quantized against tileExtents, and
+     * groups carry no bounding box. Polygons are written as exterior and
+     * interior rings.
+     */
+    void dumpVTSGeodata(std::ostream & os, const math::Extents2 &tileExtents
+                        , const unsigned resolution = 4096);
 
     /** Calls f(v) for every vertex in all layers
      */
@@ -363,6 +377,13 @@ public :
     std::vector<Layer> layers;
 
 private :
+
+    /** Shared body of both dumpVTSGeodata overloads; planar selects the
+     *  version 2 form.
+     */
+    void dumpGeodata(std::ostream &os
+                     , const boost::optional<math::Extents2> &planar
+                     , unsigned resolution);
 
     template <class TPoint3>
     static Json::Value buildPoint3( const TPoint3 & p );

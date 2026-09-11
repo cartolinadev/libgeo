@@ -762,194 +762,238 @@ void FeatureLayers::dumpLegacyGeodata(std::ostream & os
     }
 }
 
+namespace {
+
+/** Quantizes coordinates into resolution steps across an extent, writing
+ *  either three (version 1) or two (planar, version 2) components.
+ */
+struct ToLocal {
+
+    math::Point3 origin, scale;
+    int dimensions;
+
+    ToLocal(const boost::optional<math::Extents3> &extents
+            , unsigned resolution)
+        : origin(0, 0, 0), scale(1, 1, 1), dimensions(3)
+    {
+        if (!extents) return;
+        origin = extents->ll;
+        setScale(extents->ur - extents->ll, resolution);
+    }
+
+    ToLocal(const math::Extents2 &extents, unsigned resolution)
+        : origin(extents.ll(0), extents.ll(1), 0), scale(0, 0, 0)
+        , dimensions(2)
+    {
+        setScale(math::Point3(extents.ur(0) - extents.ll(0)
+                              , extents.ur(1) - extents.ll(1), 0)
+                 , resolution);
+    }
+
+    void setScale(const math::Point3 &range, unsigned resolution) {
+
+        // an empty range collapses to zero
+        for (int axis = 0; axis < 3; ++axis)
+            scale[axis] = range[axis] ? (resolution / range[axis]) : 0.0;
+    }
+
+    Json::Value operator()(const math::Point3 &p) const {
+
+        Json::Value value(Json::arrayValue);
+        for (int axis = 0; axis < dimensions; ++axis)
+            value.append(static_cast<int>
+                         (round((p[axis] - origin[axis]) * scale[axis])));
+        return value;
+    }
+};
+
+Json::Value buildProperties(const FeatureLayers::Features::Base &feature)
+{
+    Json::Value properties(Json::objectValue);
+
+    // the upstream feature id, as id_ by convention
+    properties["id_"] = std::to_string(feature.fid);
+
+    for (const auto &property : feature.properties)
+        properties[property.first] = property.second;
+
+    return properties;
+}
+
+Json::Value buildRing(const math::Points3 &ring, const ToLocal &tolocal)
+{
+    Json::Value jring(Json::arrayValue);
+    for (const auto &point : ring) jring.append(tolocal(point));
+    return jring;
+}
+
+void dumpPoints(Json::Value &jlayer, const FeatureLayers::Layer &layer
+                , const ToLocal &tolocal)
+{
+    if (layer.features.points.empty()) return;
+
+    auto &jpoints = jlayer["points"] = Json::arrayValue;
+
+    for (const auto &point : layer.features.points) {
+
+        auto &jpoint = jpoints.append(Json::objectValue);
+        jpoint["id"] = point.id;
+        jpoint["properties"] = buildProperties(point);
+        jpoint["points"] = Json::arrayValue;
+        jpoint["points"].append(tolocal(point.point));
+    }
+}
+
+void dumpLines(Json::Value &jlayer, const FeatureLayers::Layer &layer
+               , const ToLocal &tolocal)
+{
+    if (layer.features.multilinestrings.empty()) return;
+
+    auto &jmultilinestrings = jlayer["lines"] = Json::arrayValue;
+
+    for (const auto &multilinestring : layer.features.multilinestrings) {
+
+        auto &jmultilinestring
+            = jmultilinestrings.append(Json::objectValue);
+        jmultilinestring["id"] = multilinestring.id;
+        jmultilinestring["properties"] = buildProperties(multilinestring);
+
+        auto &jlines = jmultilinestring["lines"] = Json::arrayValue;
+        for (const auto &linestring : multilinestring.lines)
+            jlines.append(buildRing(linestring, tolocal));
+    }
+}
+
+/** Planar polygons: every polygon keeps its rings.
+ */
+void dumpPolygons(Json::Value &jlayer, const FeatureLayers::Layer &layer
+                  , const ToLocal &tolocal)
+{
+    if (layer.features.multipolygons.empty()) return;
+
+    auto &jmultipolygons = jlayer["polygons"] = Json::arrayValue;
+
+    for (const auto &multipolygon : layer.features.multipolygons) {
+
+        auto &jmultipolygon = jmultipolygons.append(Json::objectValue);
+        jmultipolygon["id"] = multipolygon.id;
+        jmultipolygon["properties"] = buildProperties(multipolygon);
+
+        auto &jpolygons = jmultipolygon["polygons"] = Json::arrayValue;
+
+        for (const auto &polygon : multipolygon.polygons) {
+
+            auto &jpolygon = jpolygons.append(Json::objectValue);
+            jpolygon["exterior"] = buildRing(polygon.exterior, tolocal);
+
+            auto &jinteriors = jpolygon["interiors"] = Json::arrayValue;
+            for (const auto &interior : polygon.interiors)
+                jinteriors.append(buildRing(interior, tolocal));
+        }
+    }
+}
+
+/** Version 1 polygons: triangulated surfaces only.
+ */
+void dumpSurfaces(Json::Value &jlayer, const FeatureLayers::Layer &layer
+                  , const ToLocal &tolocal)
+{
+    if (!layer.features.multipolygons.empty()) {
+        LOG(warn3)
+            << "Polygons may not be serialized to geodata, "
+            << "please convert to surfaces first.";
+    }
+
+    if (layer.features.surfaces.empty()) return;
+
+    auto &jsurfaces = jlayer["polygons"] = Json::arrayValue;
+
+    for (const auto &surface : layer.features.surfaces) {
+
+        auto &jsurface = jsurfaces.append(Json::objectValue);
+        jsurface["id"] = surface.id;
+        jsurface["properties"] = buildProperties(surface);
+
+        auto &jvertices = jsurface["vertices"] = Json::arrayValue;
+        for (const auto &vertex : surface.vertices)
+            for (const auto &component : tolocal(vertex))
+                jvertices.append(component);
+
+        auto &jpatches = jsurface["surface"] = Json::arrayValue;
+        for (const auto &patch : surface.surface)
+            for (int corner = 0; corner < 3; ++corner)
+                jpatches.append(patch[corner]);
+
+        auto &jboundaries = jsurface["borders"] = Json::arrayValue;
+
+        for (const auto &boundary : surface.boundaries) {
+
+            auto &jboundary = jboundaries.append(Json::arrayValue);
+            for (const auto &index : boundary) jboundary.append(index);
+        }
+    }
+}
+
+} // namespace
+
 void FeatureLayers::dumpVTSGeodata(std::ostream & os
                                    , const unsigned resolution)
 {
-    // transformation to local coordinates
-    struct ToLocal_ {
+    dumpGeodata(os, boost::none, resolution);
+}
 
-        math::Point3 origin, scale;
+void FeatureLayers::dumpVTSGeodata(std::ostream & os
+                                   , const math::Extents2 &tileExtents
+                                   , const unsigned resolution)
+{
+    dumpGeodata(os, tileExtents, resolution);
+}
 
-        ToLocal_(const boost::optional<math::Extents3> & extents
-                , const unsigned resolution)
-            : origin(0,0,0), scale(1,1,1)
-        {
-
-            if (extents) origin = extents->ll;
-
-            math::Point3 dvect(extents->ur - extents->ll);
-            for (int i = 0; i < 3; ++i) {
-                if (dvect[i]) {
-                    scale[i] = resolution / dvect[i];
-                } else {
-                    // force zero for empty range
-                    scale[i] = 0.0;
-                }
-            }
-        }
-
-        math::Point3i operator()( const math::Point3 & p ) const {
-
-            return { static_cast<int>(round((p[0] - origin[0]) * scale[0]))
-                   , static_cast<int>(round((p[1] - origin[1]) * scale[1]))
-                   , static_cast<int>(round((p[2] - origin[2]) * scale[2])) };
-        }
-    };
-
-    // root json object
+void FeatureLayers::dumpGeodata(std::ostream &os
+                                , const boost::optional<math::Extents2> &planar
+                                , unsigned resolution)
+{
     Json::Value root(Json::objectValue);
-    root["version"] = Json::Value(1);
+    root["version"] = Json::Value(planar ? 2 : 1);
 
-    auto & jlayers = root["groups"] = Json::arrayValue;
+    auto &jlayers = root["groups"] = Json::arrayValue;
 
-    // iterate through layers
-    for (const auto & layer: layers) {
+    for (const auto &layer : layers) {
 
-        auto & jlayer = jlayers.append(Json::objectValue);
-
-        // name
+        auto &jlayer = jlayers.append(Json::objectValue);
         jlayer["id"] = layer.name;
-
-        // bounding box
-        if (layer.featuresBB) {
-
-            auto & bbox = jlayer["bbox"] = Json::arrayValue;
-            bbox.append(buildPoint3(layer.featuresBB->ll));
-            bbox.append(buildPoint3(layer.featuresBB->ur));
-        }
-
-        // resolution
         jlayer["resolution"] = resolution;
 
-        // coordinate transformer
-        ToLocal_ tolocal(layer.featuresBB, resolution);
+        // planar groups are quantized against the tile, version 1 groups
+        // against their own bounding box
+        if (planar) {
 
-        // points
-        if (layer.features.points.size() > 0) {
+            const ToLocal tolocal(*planar, resolution);
+            dumpPoints(jlayer, layer, tolocal);
+            dumpLines(jlayer, layer, tolocal);
+            dumpPolygons(jlayer, layer, tolocal);
 
-            auto &jpoints = jlayer["points"] = Json::arrayValue;
+        } else {
 
-            for (const auto &point: layer.features.points) {
+            if (layer.featuresBB) {
 
-                auto &jpoint = jpoints.append(Json::objectValue);
-
-                // id
-                jpoint["id"] = point.id;
-
-                auto & properties = jpoint["properties"] = Json::objectValue;
-                
-                // the upstream feature id, as id_ by convention 
-                properties["id_"] = std::to_string(point.fid);
-                
-                // properties
-                for (const auto & property: point.properties)
-                    properties[property.first] = property.second;
-
-                // geometry
-                jpoint["points"] = Json::arrayValue;
-                jpoint["points"].append(buildPoint3(tolocal(point.point)));
+                auto &bbox = jlayer["bbox"] = Json::arrayValue;
+                bbox.append(buildPoint3(layer.featuresBB->ll));
+                bbox.append(buildPoint3(layer.featuresBB->ur));
             }
 
-        } // end points
-
-        // linestrings
-        if (layer.features.multilinestrings.size() > 0) {
-
-            auto & jmultilinestrings = jlayer["lines"] = Json::arrayValue;
-
-            for (const auto &multilinestring: layer.features.multilinestrings) {
-
-                auto &jmultilinestring
-                    = jmultilinestrings.append(Json::objectValue);
-
-                // id
-                jmultilinestring["id"] = multilinestring.id;
-
-                auto & properties
-                    = jmultilinestring["properties"] = Json::objectValue;
-
-                // the upstream feature id, as id_ by convention 
-                properties["id_"] = std::to_string(multilinestring.fid);
-                
-                // properties
-                for (const auto & property: multilinestring.properties)
-                    properties[property.first] = property.second;
-
-                // geometries
-                jmultilinestring["lines"] = Json::arrayValue;
-
-                for (const auto &linestring: multilinestring.lines) {
-
-                    auto &jline
-                        = jmultilinestring["lines"].append(Json::arrayValue);
-
-                    for (const auto & point: linestring)
-                        jline.append(buildPoint3(tolocal(point)));
-                }
-            }
-        } // end linestrings
-
-        // polygons
-        if (layer.features.multipolygons.size() > 0) {
-            LOG(warn3)
-                << "Polygons may not be serialized to geodata, "
-                << "please convert to surfaces first.";
+            const ToLocal tolocal(layer.featuresBB, resolution);
+            dumpPoints(jlayer, layer, tolocal);
+            dumpLines(jlayer, layer, tolocal);
+            dumpSurfaces(jlayer, layer, tolocal);
         }
-
-        // surfaces
-        if (layer.features.surfaces.size() > 0) {
-
-            auto & jsurfaces = jlayer["polygons"] = Json::arrayValue;
-
-            for (const auto & surface: layer.features.surfaces) {
-
-                auto &jsurface = jsurfaces.append(Json::objectValue);
-
-                // id and properties
-                jsurface["id"] = surface.id;
-
-                auto & properties = jsurface["properties"] = Json::objectValue;
-
-                // the upstream feature id, as id_ by convention 
-                properties["id_"] = std::to_string(surface.fid);
-                
-                // properties
-                for (const auto & property: surface.properties)
-                    properties[property.first] = property.second;
-
-                // geometry
-                auto & jvertices = jsurface["vertices"] = Json::arrayValue;
-
-                for (const auto &vertex: surface.vertices) {
-                    const auto v(tolocal(vertex));
-                    for ( int i(0); i < 3; i++) jvertices.append(v[i]);
-                }
-
-                auto & jpatches = jsurface["surface"] = Json::arrayValue;
-
-                for (const auto &patch: surface.surface)
-                    for ( int i(0); i < 3; i++) jpatches.append(patch[i]);
-
-                auto & jboundaries = jsurface["borders"] = Json::arrayValue;
-
-                for (const auto &boundary: surface.boundaries) {
-
-                    auto & jboundary = jboundaries.append(Json::arrayValue);
-                    for (const auto & index: boundary) jboundary.append(index);
-                }
-            }
-
-        } // end surfaces
-
-    } // end layer
-
-    {
-        Json::StreamWriterBuilder wb;
-        wb["indentation"] = "";
-        wb["commentStyle"] = "None";
-        std::unique_ptr<Json::StreamWriter> writer(wb.newStreamWriter());
-        writer->write(root, &os);
     }
+
+    Json::StreamWriterBuilder wb;
+    wb["indentation"] = "";
+    wb["commentStyle"] = "None";
+    std::unique_ptr<Json::StreamWriter> writer(wb.newStreamWriter());
+    writer->write(root, &os);
 }
 
 boost::optional<math::Extents3> FeatureLayers::boundingBox(
