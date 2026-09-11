@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2017 Melown Technologies SE
+ * Copyright (c) 2016-2018 Melown Technologies SE
+ * Copyright (c) 2026 Montevallo Consulting, s.r.o.
 *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -34,6 +35,7 @@ namespace geo {
 
 UTILITY_GENERATE_ENUM(VectorFormat,
                       ((geodataJson))
+                      ((mvt))
                       )
 
 /** Returns content type string for given file format

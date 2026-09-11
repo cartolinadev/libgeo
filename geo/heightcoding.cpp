@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2017 Melown Technologies SE
+ * Copyright (c) 2016-2023 Melown Technologies SE
+ * Copyright (c) 2025-2026 Montevallo Consulting, s.r.o.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -34,15 +35,11 @@
 
 namespace geo { namespace heightcoding {
 
-Metadata heightCode(::GDALDataset &vectorDs
-                    , const std::vector<const GeoDataset*> &rasterDs
-                    , std::ostream &os, const Config &config)
-{   
-    Metadata metadata;
-
-    // remember start position in the output stream
-    const auto startPos(os.tellp());
-
+FeatureLayers loadFeatureLayers(::GDALDataset &vectorDs
+                                , const std::vector<const GeoDataset*>
+                                &rasterDs
+                                , const Config &config)
+{
     FeatureLayers::LoadOptions lo;
     lo.sourceSrs = config.vectorDsSrs;
 
@@ -57,10 +54,10 @@ Metadata heightCode(::GDALDataset &vectorDs
 
     // load feature layers from vectorDs
     FeatureLayers featureLayers(vectorDs, lo);
-    
+
     // resolve all ids back to osm_id if using planetiler schema
     if ((config.schema) == Schema::planetiler)
-        for (auto & layer: featureLayers.layers) 
+        for (auto & layer: featureLayers.layers)
             layer.features.updateProperties([](auto& fid, auto&) {
                 fid = fid / 10; });
 
@@ -111,6 +108,20 @@ Metadata heightCode(::GDALDataset &vectorDs
     if (config.postprocess) {
         config.postprocess(featureLayers);
     }
+
+    return featureLayers;
+}
+
+Metadata heightCode(::GDALDataset &vectorDs
+                    , const std::vector<const GeoDataset*> &rasterDs
+                    , std::ostream &os, const Config &config)
+{
+    Metadata metadata;
+
+    // remember start position in the output stream
+    const auto startPos(os.tellp());
+
+    auto featureLayers(loadFeatureLayers(vectorDs, rasterDs, config));
 
     // update metadata.extents
     if (config.outputSrs) {

@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2017 Melown Technologies SE
+ * Copyright (c) 2016-2019 Melown Technologies SE
+ * Copyright (c) 2025-2026 Montevallo Consulting, s.r.o.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -164,6 +165,20 @@ struct Metadata {
      */
     std::size_t fileSize;
 };
+
+/** Loads feature layers from vectorDs and applies config to them: height
+ *  coding against rasterDs unless the mode says never, the output SRS
+ *  transformation, and the postprocess hook. Nothing is serialized.
+ *
+ *  \param vectorDs input vector dataset
+ *  \param rasterDs stack of raster datasets used to height code vector data
+ *  \param config work configuration
+ *  \return the loaded feature layers
+ */
+FeatureLayers loadFeatureLayers(::GDALDataset &vectorDs
+                                , const std::vector<const GeoDataset*>
+                                &rasterDs
+                                , const Config &config = Config());
 
 /** Height code vector data from vectorDs using height information from raster
  *  dataset stack rasterDs.

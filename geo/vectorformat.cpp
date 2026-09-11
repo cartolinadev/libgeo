@@ -1,5 +1,6 @@
 /**
- * Copyright (c) 2017 Melown Technologies SE
+ * Copyright (c) 2016-2019 Melown Technologies SE
+ * Copyright (c) 2026 Montevallo Consulting, s.r.o.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -32,6 +33,9 @@ const char* contentType(VectorFormat format)
     switch (format) {
     case VectorFormat::geodataJson:
         return "application/json; charset=utf-8";
+
+    case VectorFormat::mvt:
+        return "application/vnd.mapbox-vector-tile";
     }
 
     // should be never reached
