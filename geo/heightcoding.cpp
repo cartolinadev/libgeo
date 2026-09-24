@@ -55,12 +55,6 @@ FeatureLayers loadFeatureLayers(::GDALDataset &vectorDs
     // load feature layers from vectorDs
     FeatureLayers featureLayers(vectorDs, lo);
 
-    // resolve all ids back to osm_id if using planetiler schema
-    if ((config.schema) == Schema::planetiler)
-        for (auto & layer: featureLayers.layers)
-            layer.features.updateProperties([](auto& fid, auto&) {
-                fid = fid / 10; });
-
     // heightcode
     auto workingSrs(config.workingSrs
                     ? config.workingSrs : config.rasterDsSrs);
